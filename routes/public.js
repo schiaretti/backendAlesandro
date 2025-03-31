@@ -83,6 +83,8 @@ router.post('/login', async (req, res) => {
     }
 })
 
+//rota de cadastro
+
 router.post('/postes', authenticateToken, upload.array('fotos'), async (req, res) => {
     try {
         const { body, files } = req;
@@ -120,7 +122,7 @@ router.post('/postes', authenticateToken, upload.array('fotos'), async (req, res
             });
         }
 
-        // 4. Criação do poste (restante do seu código...)
+        // 4. Criação do poste 
         const novoPoste = await prisma.postes.create({
             data: {
                 usuarioId: req.user.id,
