@@ -3,29 +3,64 @@ import publicRoutes from './routes/public.js';
 import privateRoutes from './routes/private.js';
 import auth from './middlewares/auth.js';
 import cors from 'cors';
+import { PrismaClient } from '@prisma/client';
+
+// Inicializa o Prisma Client
+const prisma = new PrismaClient();
 
 const app = express();
 
-// Configurações essenciais
+// Middlewares essenciais
 app.use(express.json());
 app.use(cors({
-  origin: '*', // Ou especifique seus domínios permitidos
+  origin: process.env.CORS_ORIGIN || '*', // Melhor usar variável de ambiente
   methods: ['GET', 'POST', 'PUT', 'DELETE'],
-  allowedHeaders: ['Content-Type', 'Authorization']
+  allowedHeaders: ['Content-Type', 'Authorization', 'x-auth-token']
 }));
+
+// Conexão com o Prisma
+async function connectPrisma() {
+  try {
+    await prisma.$connect();
+    console.log('✅ Prisma conectado ao banco de dados');
+  } catch (error) {
+    console.error('❌ Erro ao conectar Prisma:', error);
+    process.exit(1); // Encerra o servidor se não conectar
+  }
+}
 
 // Rotas
 app.use('/api', publicRoutes);
 app.use('/api', auth, privateRoutes);
 
-// Rota de health check (obrigatória para o Railway)
-app.get('/health', (req, res) => {
-  res.status(200).json({ status: 'OK' });
+// Health Check melhorado
+app.get('/health', async (req, res) => {
+  try {
+    await prisma.$queryRaw`SELECT 1`;
+    res.status(200).json({ 
+      status: 'OK',
+      database: 'conectado'
+    });
+  } catch (error) {
+    res.status(500).json({
+      status: 'ERROR',
+      database: 'desconectado',
+      error: error.message
+    });
+  }
 });
 
-// Configuração da porta para o Railway
+// Configuração do servidor
 const PORT = process.env.PORT || 3000;
 
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`Servidor rodando na porta ${PORT}`);
+app.listen(PORT, '0.0.0.0', async () => {
+  await connectPrisma(); // Conecta ao banco antes de iniciar
+  console.log(`🚀 Servidor rodando na porta ${PORT}`);
+  console.log(`🔗 Health check em http://localhost:${PORT}/health`);
+});
+
+// Encerramento elegante
+process.on('SIGTERM', async () => {
+  await prisma.$disconnect();
+  process.exit(0);
 });
