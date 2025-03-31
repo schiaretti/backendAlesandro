@@ -204,7 +204,7 @@ router.post('/postes', authenticateToken, upload.array('fotos'), async (req, res
 });
 
 // Rota para listar postes do usuário (mantido igual)
-router.get('/postes', authenticateToken, async (req, res) => {
+router.get('/listar-postes', authenticateToken, async (req, res) => {
     try {
         const postes = await prisma.postes.findMany({
             where: {
