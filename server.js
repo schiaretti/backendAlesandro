@@ -9,8 +9,8 @@ const app = express()
 
 app.use(express.json())
 app.use(cors())
-app.use('/', publicRoutes)
-app.use('/', auth, privateRoutes)
+app.use('/api', publicRoutes)
+app.use('/api', auth, privateRoutes)
 
 
 app.listen(3000, () => console.log('servidor rodando!'))
