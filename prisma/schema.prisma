@@ -1,0 +1,82 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mongodb"
+  url      = env("DATABASE_URL")
+}
+
+model usuarios {
+  id    String @id @default(auto()) @map("_id") @db.ObjectId
+  email String @unique
+  nome  String
+  senha String
+  nivel String
+  postes Postes[]
+}
+
+model Postes {
+  id                 String   @id @default(auto()) @map("_id") @db.ObjectId
+  usuario            usuarios @relation(fields: [usuarioId], references: [id])
+  usuarioId          String   @db.ObjectId
+  coords             String
+  cidade             String
+  endereco           String
+  numero             String
+  cep                String
+  isLastPost         Boolean
+  localizacao        String?
+  transformador      String?
+  medicao           String?
+  telecom           String?
+  concentrador      String?
+  poste             String?
+  alturaposte       String?
+  estruturaposte    String?
+  tipoBraco         String?
+  tamanhoBraco      String?
+  quantidadePontos  String?
+  tipoLampada       String?
+  potenciaLampada   String?
+  tipoReator        String?
+  tipoComando       String?
+  tipoRede          String?
+  tipoCabo          String?
+  numeroFases       String?
+  tipoVia           String?
+  hierarquiaVia     String?
+  tipoPavimento     String?
+  quantidadeFaixas  String?
+  tipoPasseio       String?
+  canteiroCentral   String?
+  finalidadeInstalacao String?
+  especieArvore     String?
+  createdAt         DateTime @default(now())
+  fotos             Foto[]
+}
+
+model Foto {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  url       String
+  tipo      FotoTipo
+  coords    String?  // Coordenadas no formato "[lat, lng]"
+  poste     Postes   @relation(fields: [posteId], references: [id])
+  posteId   String   @db.ObjectId
+  createdAt DateTime @default(now())
+}
+
+enum FotoTipo {
+  PANORAMICA
+  ARVORE
+  LUMINARIA
+  TELECOM
+  LAMPADA
+  OUTRA
+}
