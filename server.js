@@ -29,6 +29,18 @@ async function connectPrisma() {
   }
 }
 
+// Adicione esta rota antes das outras rotas
+app.get('/', (req, res) => {
+    res.status(200).json({
+      message: 'API em funcionamento!',
+      endpoints: {
+        login: '/api/login',
+        health: '/health',
+        // adicione outros endpoints relevantes
+      }
+    });
+  });
+
 // Rotas
 app.use('/api', publicRoutes);
 app.use('/api', auth, privateRoutes);
