@@ -1,26 +1,57 @@
-import jwt from 'jsonwebtoken'
+import jwt from 'jsonwebtoken';
 
-const JWT_SECRET = process.env.JWT_SECRET
+const JWT_SECRET = process.env.JWT_SECRET;
 
+/**
+ * Middleware de autenticação JWT padrão
+ * (Exportado como default para compatibilidade com seu código existente)
+ */
 const auth = (req, res, next) => {
+    const authHeader = req.headers['authorization'];
+    const token = authHeader?.split(' ')[1]; // Remove 'Bearer '
 
-   const token = req.headers.authorization
+    if (!token) {
+        return res.status(401).json({ 
+            success: false,
+            message: 'Token de acesso não fornecido',
+            code: 'MISSING_TOKEN'
+        });
+    }
 
-   if(!token){
-    return res.status(401).json({message: 'Acesso negado!'})
-   }
+    jwt.verify(token, JWT_SECRET, (err, decoded) => {
+        if (err) {
+            return res.status(403).json({
+                success: false,
+                message: 'Token inválido ou expirado',
+                code: 'INVALID_TOKEN',
+                details: process.env.NODE_ENV === 'development' ? err.message : undefined
+            });
+        }
 
-   try {
-    const decoded = jwt.verify(token.replace('Bearer ', ''), JWT_SECRET)
+        // Mantendo os nomes de campos que você já usa
+        req.usuarioId = decoded.id;
+        req.usuarioNivel = decoded.nivel;
 
-   req.usuarioNivel = decoded.usuarioNivel
-    
-   } catch (error) {
-    res.status(404).json({message:'Token inválido!'})
-   }
+        next();
+    });
+};
 
-    next()
+/**
+ * Middleware de autorização por nível (opcional)
+ * (Exportado como named export para uso avançado)
+ */
+export const authorizeByLevel = (niveisPermitidos) => {
+    return (req, res, next) => {
+        if (!niveisPermitidos.includes(req.usuarioNivel)) {
+            return res.status(403).json({
+                success: false,
+                message: 'Acesso não autorizado para seu nível de usuário',
+                code: 'UNAUTHORIZED_ACCESS'
+            });
+        }
+        next();
+    };
+};
 
-}
-
-export default auth
+// Exportação padrão (main middleware)
+export default auth;
