@@ -9,29 +9,77 @@ const router = express.Router()
 const JWT_SECRET = process.env.JWT_SECRET
 
 
-// Rota de login 
+// Rota de login corrigida
 router.post('/login', async (req, res) => {
     try {
-        const usuarioInfo = req.body
-        const usuario = await prisma.usuarios.findUnique({where:{email: usuarioInfo.email}})
+        const { email, senha } = req.body;
 
-        if(!usuario){
-            return res.status(404).json({message: 'Usuário não encontrado!'})
+        // Validação dos campos
+        if (!email || !senha) {
+            return res.status(400).json({
+                success: false,
+                message: 'Email e senha são obrigatórios',
+                code: 'MISSING_CREDENTIALS'
+            });
         }
 
-        const isMatch = await bcrypt.compare(usuarioInfo.senha, usuario.senha)
+        // Busca o usuário
+        const usuario = await prisma.usuarios.findUnique({
+            where: { email }
+        });
 
-        if(!isMatch){
-            return res.status(400).json({message: 'Senha inválida!'})
+        if (!usuario) {
+            return res.status(404).json({
+                success: false,
+                message: 'Usuário não encontrado',
+                code: 'USER_NOT_FOUND'
+            });
         }
 
-        const token = jwt.sign({id: usuario.id, nivel: usuario.nivel}, JWT_SECRET, {expiresIn: '1d'})
-        res.status(201).json(token)
+        // Verifica a senha
+        const senhaValida = await bcrypt.compare(senha, usuario.senha);
+        
+        if (!senhaValida) {
+            return res.status(401).json({
+                success: false,
+                message: 'Credenciais inválidas',
+                code: 'INVALID_CREDENTIALS'
+            });
+        }
+
+        // Gera o token JWT
+        const token = jwt.sign(
+            {
+                id: usuario.id,
+                nivel: usuario.nivel
+            }, 
+            process.env.JWT_SECRET,
+            { expiresIn: '1d' }
+        );
+
+        // Resposta formatada corretamente
+        res.status(200).json({
+            success: true,
+            message: 'Login realizado com sucesso',
+            token,
+            user: {
+                id: usuario.id,
+                email: usuario.email,
+                nome: usuario.nome,
+                nivel: usuario.nivel
+            }
+        });
+
     } catch (error) {
-        res.status(500).json({message: "Erro no servidor rota login!"})
+        console.error('Erro no login:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Erro interno no servidor',
+            code: 'INTERNAL_SERVER_ERROR',
+            details: process.env.NODE_ENV === 'development' ? error.message : undefined
+        });
     }
-})
-
+});
 
 
 
