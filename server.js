@@ -39,7 +39,7 @@ app.get('/', (req, res) => {
   });
 
 // Rotas
-app.use('/api', publicRoutes);
+app.use('/api/login', publicRoutes);
 app.use('/api', auth, privateRoutes);
 
 // Health Check
