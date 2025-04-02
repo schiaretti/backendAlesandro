@@ -81,6 +81,31 @@ router.post('/login', async (req, res) => {
     }
 });
 
+router.get('/listar-postes', async (req, res) => {
+    try {
+
+        console.log('Usuário autenticado:', req.user); // Log do usuário
+
+        const postes = await prisma.postes.findMany({
+          
+            include: { fotos: true },
+            orderBy: { createdAt: 'desc' }
+        });
+
+        res.json({
+            success: true,
+            data: postes
+        });
+    } catch (error) {
+        console.error('Erro ao listar postes:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Erro ao listar postes',
+            code: 'POST_LIST_ERROR'
+        });
+    }
+});
+
 
 
 export default router

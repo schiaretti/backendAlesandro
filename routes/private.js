@@ -193,26 +193,6 @@ router.post('/postes', authenticateToken, upload.array('fotos'), async (req, res
     
 
 
-router.get('/listar-postes', authenticateToken, async (req, res) => {
-    try {
-        const postes = await prisma.postes.findMany({
-            where: { usuarioId: req.user.id },
-            include: { fotos: true },
-            orderBy: { createdAt: 'desc' }
-        });
 
-        res.json({
-            success: true,
-            data: postes
-        });
-    } catch (error) {
-        console.error('Erro ao listar postes:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Erro ao listar postes',
-            code: 'POST_LIST_ERROR'
-        });
-    }
-});
 
 export default router;

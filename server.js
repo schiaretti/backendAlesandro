@@ -30,10 +30,11 @@ app.get('/', (req, res) => {
       endpoints: {
         public: {
           login: '/api/login',
-          health: '/health'
+          health: '/health',
+          listarPostes: '/api/listar-postes'
         },
         private: {
-          postes: '/api/private/listar-postes',
+          
           usuarios: '/api/private/listar-usuarios'
         }
       }
