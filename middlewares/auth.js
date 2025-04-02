@@ -8,6 +8,7 @@ const JWT_SECRET = process.env.JWT_SECRET;
  */
 const auth = (req, res, next) => {
     const authHeader = req.headers['authorization'];
+    console.log('Rota acessada:', req.path); // Adicione esta linha
     const token = authHeader?.split(' ')[1]; // Remove 'Bearer '
 
     if (!token) {
@@ -52,6 +53,7 @@ export const authorizeByLevel = (niveisPermitidos) => {
         next();
     };
 };
+
 
 // Exportação padrão (main middleware)
 export default auth;

@@ -2,9 +2,7 @@ import express from 'express'
 import { PrismaClient } from '@prisma/client'
 import bcrypt, { hash } from 'bcrypt'
 import jwt from 'jsonwebtoken'
-import multer from 'multer';
-import path from 'path';
-import fs from 'fs';
+
 
 const prisma = new PrismaClient()
 const router = express.Router()
