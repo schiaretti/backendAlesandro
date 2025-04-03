@@ -147,7 +147,7 @@ router.post('/postes', upload.array('fotos'), async (req, res) => {
         // 4. Criação do poste 
         const novoPoste = await prisma.postes.create({
             data: {
-                usuarioId: req.user.id,
+              
                 coords: body.coords,
                 cidade: body.cidade,
                 endereco: body.endereco,
