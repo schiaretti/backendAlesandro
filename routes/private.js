@@ -27,7 +27,7 @@ router.post('/cadastro-usuarios', authenticateToken, async (req, res) => {
             data: { email, nome, senha: hashSenha, nivel }
         });
 
-        res.status(201).json({
+        res.status(201).json({  
             success: true,
             data: {
                 id: usuarioDb.id,
