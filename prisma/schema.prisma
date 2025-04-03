@@ -58,7 +58,8 @@ model Postes {
   canteiroCentral   String?
   finalidadeInstalacao String?
   especieArvore     String?
-  createdAt         DateTime? @default(now())
+  createdAt         DateTime @default(now())
+   updatedAt DateTime @updatedAt
   fotos             Foto[]
 }
 

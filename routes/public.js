@@ -107,7 +107,7 @@ router.get('/listar-postes', async (req, res) => {
 });
 
 // Rotas de Postes
-router.post('/postes', upload.array('fotos'), async (req, res) => {
+/*router.post('/postes', upload.array('fotos'), async (req, res) => {
     try {
         const { body, files } = req;
 
@@ -234,6 +234,111 @@ router.post('/postes', upload.array('fotos'), async (req, res) => {
             message: 'Erro interno no servidor',
             code: 'INTERNAL_SERVER_ERROR',
             details: process.env.NODE_ENV === 'development' ? error.message : undefined
+        });
+    }
+});*/
+router.post('/postes', upload.array('fotos'), async (req, res) => {
+    try {
+        const { body, files } = req;
+
+        // 1. Validação das fotos obrigatórias
+        const FOTOS_OBRIGATORIAS = ['PANORAMICA', 'LUMINARIA'];
+        const tiposRecebidos = body.tipo_fotos || [];
+        
+        const faltantes = FOTOS_OBRIGATORIAS.filter(tipo => 
+            !tiposRecebidos.includes(tipo)
+        );
+
+        if (faltantes.length > 0) {
+            return res.status(400).json({
+                success: false,
+                message: `Fotos obrigatórias faltando: ${faltantes.join(', ')}`,
+                code: 'MISSING_REQUIRED_PHOTOS'
+            });
+        }
+
+        // 2. Validação dos dados básicos
+        const camposObrigatorios = ['coords', 'cidade', 'endereco', 'numero', 'cep'];
+        const camposFaltantes = camposObrigatorios.filter(campo => !body[campo]);
+        
+        if (camposFaltantes.length > 0) {
+            return res.status(400).json({
+                success: false,
+                message: `Campos obrigatórios faltando: ${camposFaltantes.join(', ')}`,
+                code: 'MISSING_REQUIRED_FIELDS'
+            });
+        }
+
+        // 3. Criação do poste com transação
+        const [novoPoste] = await prisma.$transaction([
+            prisma.postes.create({
+                data: {
+                    coords: body.coords,
+                    cidade: body.cidade,
+                    endereco: body.endereco,
+                    numero: body.numero,
+                    cep: body.cep,
+                    isLastPost: body.isLastPost === 'true',
+                    localizacao: body.localizacao,
+                    transformador: body.transformador,
+                    medicao: body.medicao,
+                    telecom: body.telecom,
+                    concentrador: body.concentrador,
+                    poste: body.poste,
+                    alturaposte: body.alturaposte,
+                    estruturaposte: body.estruturaposte,
+                    tipoBraco: body.tipoBraco,
+                    tamanhoBraco: body.tamanhoBraco,
+                    quantidadePontos: body.quantidadePontos,
+                    tipoLampada: body.tipoLampada,
+                    potenciaLampada: body.potenciaLampada,
+                    tipoReator: body.tipoReator,
+                    tipoComando: body.tipoComando,
+                    tipoRede: body.tipoRede,
+                    tipoCabo: body.tipoCabo,
+                    numeroFases: body.numeroFases,
+                    tipoVia: body.tipoVia,
+                    hierarquiaVia: body.hierarquiaVia,
+                    tipoPavimento: body.tipoPavimento,
+                    quantidadeFaixas: body.quantidadeFaixas,
+                    tipoPasseio: body.tipoPasseio,
+                    canteiroCentral: body.canteiroCentral,
+                    finalidadeInstalacao: body.finalidadeInstalacao,
+                    especieArvore: body.especieArvore,
+                    usuario: { connect: { id: body.usuarioId } },
+                    fotos: {
+                        create: files?.map((file, index) => ({
+                            url: `/uploads/${file.filename}`,
+                            tipo: tiposRecebidos[index] || 'OUTRA',
+                            coords: body.coords
+                        }))
+                    }
+                },
+                include: { fotos: true }
+            })
+        ]);
+
+        res.status(201).json({
+            success: true,
+            data: novoPoste
+        });
+
+    } catch (error) {
+        console.error('Erro no cadastro de poste:', {
+            error: error.message,
+            stack: error.stack,
+            body: req.body,
+            files: req.files?.map(f => f.originalname)
+        });
+
+        res.status(500).json({
+            success: false,
+            message: 'Erro interno no servidor',
+            code: 'INTERNAL_SERVER_ERROR',
+            details: process.env.NODE_ENV === 'development' ? {
+                message: error.message,
+                stack: error.stack
+            } : undefined
         });
     }
 });
