@@ -31,7 +31,8 @@ app.get('/', (req, res) => {
         public: {
           login: '/api/login',
           health: '/health',
-          listarPostes: '/api/listar-postes'
+          listarPostes: '/api/listar-postes',
+          postes: '/api/postes'
         },
         private: {
           
