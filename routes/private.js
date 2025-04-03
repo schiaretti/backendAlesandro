@@ -72,9 +72,4 @@ router.get('/listar-usuarios', authenticateToken, async (req, res) => {
     }
 });
 
-
-
-
-
-
 export default router;
