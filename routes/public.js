@@ -38,7 +38,7 @@ router.post('/login', async (req, res) => {
 
         // Verifica a senha
         const senhaValida = await bcrypt.compare(senha, usuario.senha);
-        
+
         if (!senhaValida) {
             return res.status(401).json({
                 success: false,
@@ -52,7 +52,7 @@ router.post('/login', async (req, res) => {
             {
                 id: usuario.id,
                 nivel: usuario.nivel
-            }, 
+            },
             process.env.JWT_SECRET,
             { expiresIn: '1d' }
         );
@@ -87,7 +87,7 @@ router.get('/listar-postes', async (req, res) => {
         console.log('Usuário autenticado:', req.user); // Log do usuário
 
         const postes = await prisma.postes.findMany({
-          
+
             include: { fotos: true },
             orderBy: { createdAt: 'desc' }
         });
@@ -110,27 +110,40 @@ router.get('/listar-postes', async (req, res) => {
 router.post('/postes', upload.array('fotos'), async (req, res) => {
     try {
         const { body, files } = req;
-        
+
         // 1. Defina as fotos obrigatórias (const ou let)
         const FOTOS_OBRIGATORIAS = ['PANORAMICA', 'LUMINARIA'];
-        
-        // 2. Processamento seguro dos tipos de foto
+
+        // 2. Processamento seguro dos tipos de foto - VERSÃO CORRIGIDA
         const tiposRecebidos = files?.map((file, index) => {
-            // Corrige o acesso ao tipo (remove tabs e formatação)
-            let tipo = body['tipo_fotos'];
-            
-            // Se for array, pega o item correspondente
-            if (Array.isArray(tipo)) {
-                tipo = tipo[index];
+            // Captura o tipo da foto de três formas diferentes
+            let tipo;
+
+            // Tentativa 1: Pega do array body.tipo_fotos[]
+            if (Array.isArray(body.tipo_fotos)) {
+                tipo = body.tipo_fotos[index];
             }
-            
-            return String(tipo || '')
-                .trim() // Remove espaços e tabs
+            // Tentativa 2: Pega do campo body.tipo_fotos[index]
+            else if (body[`tipo_fotos[${index}]`]) {
+                tipo = body[`tipo_fotos[${index}]`];
+            }
+            // Tentativa 3: Pega do campo único body.tipo_fotos
+            else {
+                tipo = body.tipo_fotos;
+            }
+
+            // Garante que o tipo seja uma string válida
+            return String(tipo || file.originalname.split('.')[0] || 'OUTRA')
+                .trim()
                 .toUpperCase();
-        }).filter(Boolean) || []; // Filtra valores vazios
+        }) || [];
+
+        // DEBUG: Mostra os tipos recebidos para verificação
+        console.log('Tipos de foto recebidos:', tiposRecebidos);
+        console.log('Estrutura completa do body:', body);
 
         // 3. Verificação de fotos obrigatórias
-        const faltantes = FOTOS_OBRIGATORIAS.filter(tipo => 
+        const faltantes = FOTOS_OBRIGATORIAS.filter(tipo =>
             !tiposRecebidos.includes(tipo)
         );
 
@@ -147,7 +160,7 @@ router.post('/postes', upload.array('fotos'), async (req, res) => {
         // 4. Criação do poste 
         const novoPoste = await prisma.postes.create({
             data: {
-              
+
                 coords: body.coords,
                 cidade: body.cidade,
                 endereco: body.endereco,
@@ -224,7 +237,7 @@ router.post('/postes', upload.array('fotos'), async (req, res) => {
         });
     }
 });
-    
+
 
 
 
