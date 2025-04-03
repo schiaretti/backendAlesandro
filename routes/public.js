@@ -2,7 +2,7 @@ import express from 'express'
 import { PrismaClient } from '@prisma/client'
 import bcrypt, { hash } from 'bcrypt'
 import jwt from 'jsonwebtoken'
-
+import upload from '../middlewares/fileUpload.js';
 
 const prisma = new PrismaClient()
 const router = express.Router()

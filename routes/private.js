@@ -2,7 +2,7 @@ import express from 'express';
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcrypt';
 import authenticateToken from '../middlewares/auth.js';
-import upload from '../middlewares/fileUpload.js';
+
 
 const prisma = new PrismaClient();
 const router = express.Router();
