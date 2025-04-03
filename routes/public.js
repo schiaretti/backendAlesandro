@@ -106,138 +106,8 @@ router.get('/listar-postes', async (req, res) => {
     }
 });
 
-// Rotas de Postes
+
 /*router.post('/postes', upload.array('fotos'), async (req, res) => {
-    try {
-        const { body, files } = req;
-
-        // 1. Defina as fotos obrigatórias (const ou let)
-        const FOTOS_OBRIGATORIAS = ['PANORAMICA', 'LUMINARIA'];
-
-        // 2. Processamento seguro dos tipos de foto - VERSÃO CORRIGIDA
-        const tiposRecebidos = files?.map((file, index) => {
-            // Captura o tipo da foto de três formas diferentes
-            let tipo;
-
-            // Tentativa 1: Pega do array body.tipo_fotos[]
-            if (Array.isArray(body.tipo_fotos)) {
-                tipo = body.tipo_fotos[index];
-            }
-            // Tentativa 2: Pega do campo body.tipo_fotos[index]
-            else if (body[`tipo_fotos[${index}]`]) {
-                tipo = body[`tipo_fotos[${index}]`];
-            }
-            // Tentativa 3: Pega do campo único body.tipo_fotos
-            else {
-                tipo = body.tipo_fotos;
-            }
-
-            // Garante que o tipo seja uma string válida
-            return String(tipo || file.originalname.split('.')[0] || 'OUTRA')
-                .trim()
-                .toUpperCase();
-        }) || [];
-
-        // DEBUG: Mostra os tipos recebidos para verificação
-        console.log('Tipos de foto recebidos:', tiposRecebidos);
-        console.log('Estrutura completa do body:', body);
-
-        // 3. Verificação de fotos obrigatórias
-        const faltantes = FOTOS_OBRIGATORIAS.filter(tipo =>
-            !tiposRecebidos.includes(tipo)
-        );
-
-        if (faltantes.length > 0) {
-            return res.status(400).json({
-                success: false,
-                message: `Fotos obrigatórias faltando: ${faltantes.join(', ')}`,
-                code: 'MISSING_REQUIRED_PHOTOS',
-                required: FOTOS_OBRIGATORIAS,
-                received: tiposRecebidos
-            });
-        }
-
-        // 4. Criação do poste 
-        const novoPoste = await prisma.postes.create({
-            data: {
-
-                coords: body.coords,
-                cidade: body.cidade,
-                endereco: body.endereco,
-                numero: body.numero,
-                cep: body.cep,
-                isLastPost: body.isLastPost === 'true',
-                localizacao: body.localizacao,
-                transformador: body.transformador,
-                medicao: body.medicao,
-                telecom: body.telecom,
-                concentrador: body.concentrador,
-                poste: body.poste,
-                alturaposte: body.alturaposte,
-                estruturaposte: body.estruturaposte,
-                tipoBraco: body.tipoBraco,
-                tamanhoBraco: body.tamanhoBraco,
-                quantidadePontos: body.quantidadePontos,
-                tipoLampada: body.tipoLampada,
-                potenciaLampada: body.potenciaLampada,
-                tipoReator: body.tipoReator,
-                tipoComando: body.tipoComando,
-                tipoRede: body.tipoRede,
-                tipoCabo: body.tipoCabo,
-                numeroFases: body.numeroFases,
-                tipoVia: body.tipoVia,
-                hierarquiaVia: body.hierarquiaVia,
-                tipoPavimento: body.tipoPavimento,
-                quantidadeFaixas: body.quantidadeFaixas,
-                tipoPasseio: body.tipoPasseio,
-                canteiroCentral: body.canteiroCentral,
-                finalidadeInstalacao: body.finalidadeInstalacao,
-                especieArvore: body.especieArvore,
-                createdAt: new Date(body.createdAt || undefined)
-            }
-        });
-
-        // 5. Processamento das fotos
-        if (files?.length > 0) {
-            await Promise.all(files.map(async (file, index) => {
-                const tipo = tiposRecebidos[index] || 'OUTRA';
-                await prisma.foto.create({
-                    data: {
-                        url: `/uploads/${file.filename}`,
-                        tipo: tipo,
-                        posteId: novoPoste.id,
-                        createdAt: new Date()
-                    }
-                });
-            }));
-        }
-
-        res.status(201).json({
-            success: true,
-            message: 'Poste cadastrado com sucesso',
-            data: await prisma.postes.findUnique({
-                where: { id: novoPoste.id },
-                include: { fotos: true }
-            })
-        });
-
-    } catch (error) {
-        console.error('Erro detalhado:', {
-            error: error.message,
-            stack: error.stack,
-            body: req.body,
-            files: req.files?.map(f => f.originalname)
-        });
-
-        res.status(500).json({
-            success: false,
-            message: 'Erro interno no servidor',
-            code: 'INTERNAL_SERVER_ERROR',
-            details: process.env.NODE_ENV === 'development' ? error.message : undefined
-        });
-    }
-});*/
-router.post('/postes', upload.array('fotos'), async (req, res) => {
     try {
         const { body, files } = req;
 
@@ -341,9 +211,139 @@ router.post('/postes', upload.array('fotos'), async (req, res) => {
             } : undefined
         });
     }
+});*/
+
+router.post('/postes', upload.array('fotos', 5), async (req, res) => {
+    try {
+        const { body, files } = req;
+
+        // 1. Validação dos campos obrigatórios
+        const requiredFields = ['coords', 'cidade', 'endereco', 'numero', 'usuarioId'];
+        const missingFields = requiredFields.filter(field => !body[field]);
+
+        if (missingFields.length > 0) {
+            cleanUploads(files);
+            return res.status(400).json({
+                success: false,
+                message: `Campos obrigatórios faltando: ${missingFields.join(', ')}`,
+                code: 'MISSING_REQUIRED_FIELDS'
+            });
+        }
+
+        // 2. Validação das fotos obrigatórias
+        const requiredPhotos = ['PANORAMICA', 'LUMINARIA'];
+        const photoTypes = Array.isArray(body.tipo_fotos) ? body.tipo_fotos : 
+                         body.tipo_fotos ? [body.tipo_fotos] : [];
+
+        const missingPhotos = requiredPhotos.filter(type => !photoTypes.includes(type));
+
+        if (missingPhotos.length > 0) {
+            cleanUploads(files);
+            return res.status(400).json({
+                success: false,
+                message: `Fotos obrigatórias faltando: ${missingPhotos.join(', ')}`,
+                code: 'MISSING_REQUIRED_PHOTOS'
+            });
+        }
+
+        // 3. Validação das coordenadas
+        let coordinates;
+        try {
+            coordinates = JSON.parse(body.coords);
+            if (!Array.isArray(coordinates) || coordinates.length !== 2 || 
+                isNaN(coordinates[0]) || isNaN(coordinates[1])) {
+                throw new Error();
+            }
+        } catch (error) {
+            cleanUploads(files);
+            return res.status(400).json({
+                success: false,
+                message: 'Coordenadas inválidas. Formato esperado: [latitude, longitude]',
+                code: 'INVALID_COORDINATES'
+            });
+        }
+
+        // 4. Criação do poste com transação
+        const result = await prisma.$transaction(async (prisma) => {
+            const poste = await prisma.postes.create({
+                data: {
+                    coords: JSON.stringify(coordinates),
+                    cidade: body.cidade,
+                    endereco: body.endereco,
+                    numero: body.numero,
+                    cep: body.cep,
+                    isLastPost: body.isLastPost === 'true',
+                    usuarioId: body.usuarioId,
+                    localizacao: body.localizacao,
+                    transformador: body.transformador,
+                    medicao: body.medicao,
+                    telecom: body.telecom,
+                    concentrador: body.concentrador,
+                    poste: body.poste,
+                    alturaposte: body.alturaposte,
+                    estruturaposte: body.estruturaposte,
+                    tipoBraco: body.tipoBraco,
+                    tamanhoBraco: body.tamanhoBraco,
+                    quantidadePontos: body.quantidadePontos,
+                    tipoLampada: body.tipoLampada,
+                    potenciaLampada: body.potenciaLampada,
+                    tipoReator: body.tipoReator,
+                    tipoComando: body.tipoComando,
+                    tipoRede: body.tipoRede,
+                    tipoCabo: body.tipoCabo,
+                    numeroFases: body.numeroFases,
+                    tipoVia: body.tipoVia,
+                    hierarquiaVia: body.hierarquiaVia,
+                    tipoPavimento: body.tipoPavimento,
+                    quantidadeFaixas: body.quantidadeFaixas,
+                    tipoPasseio: body.tipoPasseio,
+                    canteiroCentral: body.canteiroCentral,
+                    finalidadeInstalacao: body.finalidadeInstalacao,
+                    especieArvore: body.especieArvore,
+                    fotos: {
+                        create: files?.map((file, index) => ({
+                            url: `/uploads/${file.filename}`,
+                            tipo: photoTypes[index] || 'OUTRA',
+                            coords: JSON.stringify(coordinates)
+                        }))
+                    }
+                },
+                include: { fotos: true }
+            });
+
+            return poste;
+        });
+
+        res.status(201).json({
+            success: true,
+            data: result
+        });
+
+    } catch (error) {
+        cleanUploads(req.files);
+        console.error('Erro ao criar poste:', error);
+
+        res.status(500).json({
+            success: false,
+            message: 'Erro interno no servidor',
+            code: 'INTERNAL_SERVER_ERROR',
+            details: process.env.NODE_ENV === 'development' ? error.message : undefined
+        });
+    }
 });
 
-
+// Função auxiliar para limpar uploads em caso de erro
+function cleanUploads(files) {
+    if (files?.length) {
+        files.forEach(file => {
+            try {
+                fs.unlinkSync(file.path);
+            } catch (err) {
+                console.error('Erro ao limpar arquivo:', file.path, err);
+            }
+        });
+    }
+}
 
 
 export default router
