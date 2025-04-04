@@ -81,7 +81,7 @@ router.post('/login', async (req, res) => {
     }
 });
 
-router.get('/listar-postes', async (req, res) => {
+/*router.get('/listar-postes', async (req, res) => {
     try {
 
         console.log('Usuário autenticado:', req.user); // Log do usuário
@@ -104,7 +104,71 @@ router.get('/listar-postes', async (req, res) => {
             code: 'POST_LIST_ERROR'
         });
     }
+});*/
+
+router.get('/listar-postes', async (req, res) => {
+    try {
+        // 1. Parâmetros de paginação (opcional)
+        const { page = 1, limit = 1000 } = req.query; // Aumentei o limite para seu caso de uso
+        const skip = (page - 1) * limit;
+
+        // 2. Consulta otimizada apenas com os campos necessários
+        const postes = await prisma.postes.findMany({
+            select: {
+                id: true,
+                coords: true,  // Apenas as coordenadas
+                endereco: true, // Adicionei para o popup
+                cidade: true    // Adicionei para o popup
+            },
+            orderBy: { createdAt: 'desc' },
+            skip: parseInt(skip),
+            take: parseInt(limit)
+        });
+
+        // 3. Processamento seguro das coordenadas
+        const postesFormatados = postes.map(poste => {
+            try {
+                return {
+                    ...poste,
+                    coords: parseCoords(poste.coords) // Função de parse segura
+                };
+            } catch (error) {
+                console.error(`Erro ao processar coordenadas do poste ${poste.id}:`, error);
+                return null;
+            }
+        }).filter(poste => poste !== null); // Remove postes com coordenadas inválidas
+
+        res.json({
+            success: true,
+            data: postesFormatados
+        });
+
+    } catch (error) {
+        console.error('Erro ao listar postes:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Erro ao listar postes',
+            code: 'POST_LIST_ERROR'
+        });
+    }
 });
+
+// Função auxiliar para parse seguro de coordenadas
+function parseCoords(coords) {
+    if (Array.isArray(coords)) return coords;
+    
+    try {
+        // Remove aspas extras e caracteres problemáticos
+        const cleaned = coords.toString()
+            .replace(/^"+|"+$/g, '')  // Remove aspas no início e fim
+            .replace(/\\/g, '');      // Remove barras invertidas
+        
+        const parsed = JSON.parse(cleaned);
+        return Array.isArray(parsed) ? parsed : null;
+    } catch {
+        return null;
+    }
+}
 
 
 /*router.post('/postes', upload.array('fotos'), async (req, res) => {
@@ -237,7 +301,7 @@ router.post('/postes', upload.array('fotos', 5), async (req, res) => {
 
         const missingPhotos = requiredPhotos.filter(type => !photoTypes.includes(type));
 
-        if (missingPhotos.length > 0) {
+        if (missingPhotos.length > 0) {   
             cleanUploads(files);
             return res.status(400).json({
                 success: false,
