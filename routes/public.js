@@ -84,41 +84,46 @@ router.post('/login', async (req, res) => {
     }
 });
 
+
+
 router.get('/listar-postes', async (req, res) => {
     try {
-        // 1. Parâmetros de paginação (opcional)
-        const { page = 1, limit = 1000 } = req.query; // Aumentei o limite para seu caso de uso
-        const skip = (page - 1) * limit;
+        const { page = 1, limit = 1000 } = req.query;
 
-        // 2. Consulta otimizada apenas com os campos necessários
         const postes = await prisma.postes.findMany({
             select: {
                 id: true,
-                coords: true,  // Apenas as coordenadas
-                endereco: true, // Adicionei para o popup
-                cidade: true    // Adicionei para o popup
+                coords: true,
+                endereco: true,
+                cidade: true
             },
             orderBy: { createdAt: 'desc' },
-            skip: parseInt(skip),
-            take: parseInt(limit)
+            skip: (page - 1) * limit,
+            take: Number(limit)
         });
 
-        // 3. Processamento seguro das coordenadas
+        // Validação robusta
         const postesFormatados = postes.map(poste => {
-            try {
-                return {
-                    ...poste,
-                    coords: parseCoords(poste.coords) // Função de parse segura
-                };
-            } catch (error) {
-                console.error(`Erro ao processar coordenadas do poste ${poste.id}:`, error);
+            const coords = parseCoords(poste.coords);
+            
+            if (!coords || 
+                coords.some(isNaN) || 
+                coords[0] < -90 || coords[0] > 90 || 
+                coords[1] < -180 || coords[1] > 180) {
+                console.warn(`Poste ${poste.id} com coordenadas inválidas:`, poste.coords);
                 return null;
             }
-        }).filter(poste => poste !== null); // Remove postes com coordenadas inválidas
+
+            return {
+                ...poste,
+                coords: coords
+            };
+        }).filter(Boolean);
 
         res.json({
             success: true,
-            data: postesFormatados
+            data: postesFormatados,
+            count: postesFormatados.length
         });
 
     } catch (error) {
@@ -126,26 +131,32 @@ router.get('/listar-postes', async (req, res) => {
         res.status(500).json({
             success: false,
             message: 'Erro ao listar postes',
-            code: 'POST_LIST_ERROR'
+            details: error.message
         });
     }
 });
 
-// Função auxiliar para parse seguro de coordenadas
+// Função auxiliar para parse seguro de coordenadas (versão melhorada)
 function parseCoords(coords) {
-    if (Array.isArray(coords)) return coords;
-    
-    try {
-        // Remove aspas extras e caracteres problemáticos
-        const cleaned = coords.toString()
-            .replace(/^"+|"+$/g, '')  // Remove aspas no início e fim
-            .replace(/\\/g, '');      // Remove barras invertidas
-        
-        const parsed = JSON.parse(cleaned);
-        return Array.isArray(parsed) ? parsed : null;
-    } catch {
-        return null;
+    // Caso já seja array e válido
+    if (Array.isArray(coords) && coords.length === 2 && 
+        !isNaN(coords[0]) && !isNaN(coords[1])) {
+        return coords.map(Number);
     }
+    
+    // Caso seja string JSON
+    if (typeof coords === 'string') {
+        try {
+            const parsed = JSON.parse(coords.replace(/\\/g, ''));
+            if (Array.isArray(parsed) && parsed.length === 2) {
+                return parsed.map(Number);
+            }
+        } catch (e) {
+            console.error('Falha ao parsear coordenadas:', coords);
+        }
+    }
+    
+    return null; // Coordenadas inválidas
 }
 
 
