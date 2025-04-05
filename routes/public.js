@@ -187,14 +187,15 @@ router.post('/postes', handleUpload('fotos', 5), async (req, res) => {
             LAMPADA: 'LAMPADA',
         };
 
-        const requiredPhotos = ['PANORAMICA', 'LUMINARIA']; // Adicione isso antes de usar
-        
-        // Corrigir para usar TIPOS_FOTO que você definiu
-        const photoTypes = Array.isArray(body.tipo_fotos)
-            ? body.tipo_fotos.map(tipo => TIPOS_FOTO[tipo] || 'OUTRO')
-            : [TIPOS_FOTO[body.tipo_fotos] || 'OUTRO'];
+        // Modifique a parte de tratamento de fotos para:
+        const photoTypes = req.body.tipo_fotos || [];
+        const requiredPhotos = ['PANORAMICA', 'LUMINARIA'];
 
-        const missingPhotos = requiredPhotos.filter(type => !photoTypes.includes(type));
+        const missingPhotos = requiredPhotos.filter(type =>
+            !photoTypes.includes(type)
+        );
+
+
 
         if (missingPhotos.length > 0) {
             cleanUploads(files);
