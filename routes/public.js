@@ -87,6 +87,7 @@ router.post('/login', async (req, res) => {
 
 
 router.get('/listar-postes', async (req, res) => {
+    console.log('Iniciando listagem de postes'); // Adicione este log
     try {
         const { page = 1, limit = 1000 } = req.query;
 
@@ -127,11 +128,17 @@ router.get('/listar-postes', async (req, res) => {
         });
 
     } catch (error) {
-        console.error('Erro ao listar postes:', error);
+       
+        console.error('Erro detalhado ao listar postes:', {
+            message: error.message,
+            stack: error.stack,
+            prismaError: error.code, // Para erros específicos do Prisma
+        });
         res.status(500).json({
             success: false,
             message: 'Erro ao listar postes',
-            details: error.message
+            details: process.env.NODE_ENV === 'development' ? error.message : 'Erro interno',
+            code: error.code // Adicione o código de erro se disponível
         });
     }
 });
