@@ -84,40 +84,48 @@ router.post('/login', async (req, res) => {
     }
 });
 
-
-
 router.get('/listar-postes', async (req, res) => {
-    console.log('Iniciando listagem de postes'); // Adicione este log
+    console.log('Iniciando listagem de postes');
     try {
         const { page = 1, limit = 1000 } = req.query;
 
         const postes = await prisma.postes.findMany({
             select: {
                 id: true,
-                coords: true,
+                latitude: true,
+                longitude: true,
                 endereco: true,
-                cidade: true
+                cidade: true,
+                createdAt: true
             },
             orderBy: { createdAt: 'desc' },
             skip: (page - 1) * limit,
             take: Number(limit)
         });
 
-        // Validação robusta
+        // Validação e formatação dos dados
         const postesFormatados = postes.map(poste => {
-            const coords = parseCoords(poste.coords);
+            // Combina latitude e longitude em um array coords
+            const coords = [poste.latitude, poste.longitude];
             
-            if (!coords || 
-                coords.some(isNaN) || 
-                coords[0] < -90 || coords[0] > 90 || 
-                coords[1] < -180 || coords[1] > 180) {
-                console.warn(`Poste ${poste.id} com coordenadas inválidas:`, poste.coords);
+            // Validação robusta das coordenadas
+            const isValidCoordinate = (coord, min, max) => 
+                coord !== null && 
+                !isNaN(coord) && 
+                coord >= min && 
+                coord <= max;
+
+            if (!isValidCoordinate(coords[0], -90, 90) || !isValidCoordinate(coords[1], -180, 180)) {
+                console.warn(`Poste ${poste.id} com coordenadas inválidas:`, coords);
                 return null;
             }
 
             return {
-                ...poste,
-                coords: coords
+                id: poste.id,
+                endereco: poste.endereco,
+                cidade: poste.cidade,
+                coords: coords,
+                createdAt: poste.createdAt
             };
         }).filter(Boolean);
 
@@ -128,44 +136,20 @@ router.get('/listar-postes', async (req, res) => {
         });
 
     } catch (error) {
-       
         console.error('Erro detalhado ao listar postes:', {
             message: error.message,
             stack: error.stack,
-            prismaError: error.code, // Para erros específicos do Prisma
+            prismaError: error.code,
         });
+        
         res.status(500).json({
             success: false,
             message: 'Erro ao listar postes',
             details: process.env.NODE_ENV === 'development' ? error.message : 'Erro interno',
-            code: error.code // Adicione o código de erro se disponível
+            code: error.code
         });
     }
 });
-
-// Função auxiliar para parse seguro de coordenadas (versão melhorada)
-function parseCoords(coords) {
-    // Caso já seja array e válido
-    if (Array.isArray(coords) && coords.length === 2 && 
-        !isNaN(coords[0]) && !isNaN(coords[1])) {
-        return coords.map(Number);
-    }
-    
-    // Caso seja string JSON
-    if (typeof coords === 'string') {
-        try {
-            const parsed = JSON.parse(coords.replace(/\\/g, ''));
-            if (Array.isArray(parsed) && parsed.length === 2) {
-                return parsed.map(Number);
-            }
-        } catch (e) {
-            console.error('Falha ao parsear coordenadas:', coords);
-        }
-    }
-    
-    return null; // Coordenadas inválidas
-}
-
 
 router.post('/postes', handleUpload('fotos', 5), async (req, res) => {
     try {
@@ -186,12 +170,12 @@ router.post('/postes', handleUpload('fotos', 5), async (req, res) => {
 
         // 2. Validação das fotos obrigatórias
         const requiredPhotos = ['PANORAMICA', 'LUMINARIA'];
-        const photoTypes = Array.isArray(body.tipo_fotos) ? body.tipo_fotos : 
-                         body.tipo_fotos ? [body.tipo_fotos] : [];
+        const photoTypes = Array.isArray(body.tipo_fotos) ? body.tipo_fotos :
+            body.tipo_fotos ? [body.tipo_fotos] : [];
 
         const missingPhotos = requiredPhotos.filter(type => !photoTypes.includes(type));
 
-        if (missingPhotos.length > 0) {   
+        if (missingPhotos.length > 0) {
             cleanUploads(files);
             return res.status(400).json({
                 success: false,
@@ -204,12 +188,12 @@ router.post('/postes', handleUpload('fotos', 5), async (req, res) => {
         let coordinates;
         try {
             coordinates = JSON.parse(body.coords);
-            if (!Array.isArray(coordinates) || coordinates.length !== 2 || 
+            if (!Array.isArray(coordinates) || coordinates.length !== 2 ||
                 isNaN(coordinates[0]) || isNaN(coordinates[1])) {
                 throw new Error();
             }
         } catch (error) {
-        
+
             return res.status(400).json({
                 success: false,
                 message: 'Coordenadas inválidas. Formato esperado: [latitude, longitude]',
@@ -289,7 +273,7 @@ router.post('/postes', handleUpload('fotos', 5), async (req, res) => {
 // Função auxiliar para limpar uploads em caso de erro
 function cleanUploads(files) {
     if (!files?.length) return;
-    
+
     files.forEach(file => {
         try {
             // Verifica se o arquivo existe antes de tentar deletar

@@ -30,6 +30,7 @@ model Postes {
   // Coordenadas como campos numéricos separados (MELHORIA IMPORTANTE)
   latitude           Float
   longitude          Float
+  @@index([latitude, longitude], name: "coords_index")
   
   // Dados de localização
   cidade             String
