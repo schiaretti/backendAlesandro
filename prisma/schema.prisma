@@ -91,5 +91,5 @@ enum FotoTipo {
   LUMINARIA
   TELECOM
   LAMPADA
-  OUTRA
+  OUTRO
 }

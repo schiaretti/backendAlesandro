@@ -129,7 +129,7 @@ router.get('/listar-postes', async (req, res) => {
             stack: error.stack,
             prismaError: error.code,
         });
-        
+
         res.status(500).json({
             success: false,
             message: 'Erro ao listar postes',
@@ -162,10 +162,10 @@ router.post('/postes', handleUpload('fotos', 5), async (req, res) => {
             const coords = body.coords ? JSON.parse(body.coords) : [null, null];
             latitude = parseFloat(coords[0]);
             longitude = parseFloat(coords[1]);
-            
+
             // Validação dos valores
-            if (isNaN(latitude) || isNaN(longitude) || 
-                latitude < -90 || latitude > 90 || 
+            if (isNaN(latitude) || isNaN(longitude) ||
+                latitude < -90 || latitude > 90 ||
                 longitude < -180 || longitude > 180) {
                 throw new Error('Valores inválidos');
             }
@@ -178,10 +178,21 @@ router.post('/postes', handleUpload('fotos', 5), async (req, res) => {
             });
         }
 
-        // 3. Validação das fotos obrigatórias
-        const requiredPhotos = ['PANORAMICA', 'LUMINARIA', 'ARVORE', 'TELECON', 'LAMPADA'];
-        const photoTypes = Array.isArray(body.tipo_fotos) ? body.tipo_fotos :
-            body.tipo_fotos ? [body.tipo_fotos] : [];
+        // Tipos de foto permitidos
+        const TIPOS_FOTO = {
+            PANORAMICA: 'PANORAMICA',
+            LUMINARIA: 'LUMINARIA',
+            ARVORE: 'ARVORE',
+            TELECON: 'TELECON',
+            LAMPADA: 'LAMPADA',
+        };
+
+        const requiredPhotos = ['PANORAMICA', 'LUMINARIA']; // Adicione isso antes de usar
+        
+        // Corrigir para usar TIPOS_FOTO que você definiu
+        const photoTypes = Array.isArray(body.tipo_fotos)
+            ? body.tipo_fotos.map(tipo => TIPOS_FOTO[tipo] || 'OUTRO')
+            : [TIPOS_FOTO[body.tipo_fotos] || 'OUTRO'];
 
         const missingPhotos = requiredPhotos.filter(type => !photoTypes.includes(type));
 
@@ -205,14 +216,14 @@ router.post('/postes', handleUpload('fotos', 5), async (req, res) => {
                     endereco: body.endereco,
                     numero: body.numero,
                     cep: body.cep,
-                    
+
                     // Campos booleanos
                     isLastPost: body.isLastPost === 'true',
                     canteiroCentral: body.canteiroCentral === 'true',
-                    
+
                     // Relacionamento
                     usuarioId: body.usuarioId,
-                    
+
                     // Demais campos
                     localizacao: body.localizacao,
                     transformador: body.transformador,
@@ -239,12 +250,12 @@ router.post('/postes', handleUpload('fotos', 5), async (req, res) => {
                     tipoPasseio: body.tipoPasseio,
                     finalidadeInstalacao: body.finalidadeInstalacao,
                     especieArvore: body.especieArvore,
-                    
+
                     // Fotos
                     fotos: {
                         create: files?.map((file, index) => ({
                             url: `/uploads/${file.filename}`,
-                            tipo: photoTypes[index] || 'OUTRA',
+                            tipo: photoTypes[index] || 'OUTRO',
                             coords: JSON.stringify([latitude, longitude])
                         }))
                     }
