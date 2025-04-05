@@ -245,7 +245,7 @@ router.post('/postes', handleUpload('fotos', 5), async (req, res) => {
                         create: files?.map((file, index) => ({
                             url: `/uploads/${file.filename}`,
                             tipo: photoTypes[index] || 'OUTRA',
-                            coords: body.coords // Mantém como string JSON
+                            coords: JSON.stringify([latitude, longitude])
                         }))
                     }
                 },
