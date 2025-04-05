@@ -28,8 +28,8 @@ model Postes {
   usuarioId          String   @db.ObjectId
   
   // Coordenadas como campos numéricos separados (MELHORIA IMPORTANTE)
-  latitude           Float
-  longitude          Float
+  latitude           Float?
+  longitude          Float?
   @@index([latitude, longitude], name: "coords_index")
   
   // Dados de localização
