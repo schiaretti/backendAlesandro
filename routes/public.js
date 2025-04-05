@@ -179,7 +179,7 @@ router.post('/postes', handleUpload('fotos', 5), async (req, res) => {
         }
 
         // 3. Validação das fotos obrigatórias
-        const requiredPhotos = ['PANORAMICA', 'LUMINARIA'];
+        const requiredPhotos = ['PANORAMICA', 'LUMINARIA', 'ARVORE', 'TELECON', '2TIPO-LAMPADA'];
         const photoTypes = Array.isArray(body.tipo_fotos) ? body.tipo_fotos :
             body.tipo_fotos ? [body.tipo_fotos] : [];
 
