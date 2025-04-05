@@ -143,8 +143,8 @@ router.post('/postes', handleUpload('fotos', 5), async (req, res) => {
     try {
         const { body, files } = req;
 
-        // 1. Validação dos campos obrigatórios
-        const requiredFields = ['coords', 'cidade', 'endereco', 'numero', 'usuarioId'];
+        // 1. Validação dos campos obrigatórios (atualizada)
+        const requiredFields = ['cidade', 'endereco', 'numero', 'usuarioId'];
         const missingFields = requiredFields.filter(field => !body[field]);
 
         if (missingFields.length > 0) {
@@ -156,7 +156,29 @@ router.post('/postes', handleUpload('fotos', 5), async (req, res) => {
             });
         }
 
-        // 2. Validação das fotos obrigatórias
+        // 2. Validação das coordenadas (adaptada para o schema)
+        let latitude, longitude;
+        try {
+            const coords = body.coords ? JSON.parse(body.coords) : [null, null];
+            latitude = parseFloat(coords[0]);
+            longitude = parseFloat(coords[1]);
+            
+            // Validação dos valores
+            if (isNaN(latitude) || isNaN(longitude) || 
+                latitude < -90 || latitude > 90 || 
+                longitude < -180 || longitude > 180) {
+                throw new Error('Valores inválidos');
+            }
+        } catch (error) {
+            cleanUploads(files);
+            return res.status(400).json({
+                success: false,
+                message: 'Coordenadas inválidas. Formato esperado: [latitude, longitude] com valores numéricos',
+                code: 'INVALID_COORDINATES'
+            });
+        }
+
+        // 3. Validação das fotos obrigatórias
         const requiredPhotos = ['PANORAMICA', 'LUMINARIA'];
         const photoTypes = Array.isArray(body.tipo_fotos) ? body.tipo_fotos :
             body.tipo_fotos ? [body.tipo_fotos] : [];
@@ -172,65 +194,58 @@ router.post('/postes', handleUpload('fotos', 5), async (req, res) => {
             });
         }
 
-        // 3. Validação das coordenadas
-        let coordinates;
-        try {
-            coordinates = JSON.parse(body.coords);
-            if (!Array.isArray(coordinates) || coordinates.length !== 2 ||
-                isNaN(coordinates[0]) || isNaN(coordinates[1])) {
-                throw new Error();
-            }
-        } catch (error) {
-
-            return res.status(400).json({
-                success: false,
-                message: 'Coordenadas inválidas. Formato esperado: [latitude, longitude]',
-                code: 'INVALID_COORDINATES'
-            });
-        }
-
         // 4. Criação do poste com transação
         const result = await prisma.$transaction(async (prisma) => {
             const poste = await prisma.postes.create({
                 data: {
-                    coords: JSON.stringify(coordinates),
+                    // Campos de localização
+                    latitude: latitude,
+                    longitude: longitude,
                     cidade: body.cidade,
                     endereco: body.endereco,
                     numero: body.numero,
                     cep: body.cep,
+                    
+                    // Campos booleanos
                     isLastPost: body.isLastPost === 'true',
+                    canteiroCentral: body.canteiroCentral === 'true',
+                    
+                    // Relacionamento
                     usuarioId: body.usuarioId,
+                    
+                    // Demais campos
                     localizacao: body.localizacao,
                     transformador: body.transformador,
                     medicao: body.medicao,
                     telecom: body.telecom,
                     concentrador: body.concentrador,
                     poste: body.poste,
-                    alturaposte: body.alturaposte,
+                    alturaposte: body.alturaposte ? parseFloat(body.alturaposte) : null,
                     estruturaposte: body.estruturaposte,
                     tipoBraco: body.tipoBraco,
-                    tamanhoBraco: body.tamanhoBraco,
-                    quantidadePontos: body.quantidadePontos,
+                    tamanhoBraco: body.tamanhoBraco ? parseFloat(body.tamanhoBraco) : null,
+                    quantidadePontos: body.quantidadePontos ? parseInt(body.quantidadePontos) : null,
                     tipoLampada: body.tipoLampada,
-                    potenciaLampada: body.potenciaLampada,
+                    potenciaLampada: body.potenciaLampada ? parseInt(body.potenciaLampada) : null,
                     tipoReator: body.tipoReator,
                     tipoComando: body.tipoComando,
                     tipoRede: body.tipoRede,
                     tipoCabo: body.tipoCabo,
-                    numeroFases: body.numeroFases,
+                    numeroFases: body.numeroFases ? parseInt(body.numeroFases) : null,
                     tipoVia: body.tipoVia,
                     hierarquiaVia: body.hierarquiaVia,
                     tipoPavimento: body.tipoPavimento,
-                    quantidadeFaixas: body.quantidadeFaixas,
+                    quantidadeFaixas: body.quantidadeFaixas ? parseInt(body.quantidadeFaixas) : null,
                     tipoPasseio: body.tipoPasseio,
-                    canteiroCentral: body.canteiroCentral,
                     finalidadeInstalacao: body.finalidadeInstalacao,
                     especieArvore: body.especieArvore,
+                    
+                    // Fotos
                     fotos: {
                         create: files?.map((file, index) => ({
                             url: `/uploads/${file.filename}`,
                             tipo: photoTypes[index] || 'OUTRA',
-                            coords: JSON.stringify(coordinates)
+                            coords: body.coords // Mantém como string JSON
                         }))
                     }
                 },
@@ -247,13 +262,20 @@ router.post('/postes', handleUpload('fotos', 5), async (req, res) => {
 
     } catch (error) {
         cleanUploads(req.files);
-        console.error('Erro ao criar poste:', error);
+        console.error('Erro ao criar poste:', {
+            message: error.message,
+            stack: error.stack,
+            body: req.body
+        });
 
         res.status(500).json({
             success: false,
             message: 'Erro interno no servidor',
             code: 'INTERNAL_SERVER_ERROR',
-            details: process.env.NODE_ENV === 'development' ? error.message : undefined
+            details: process.env.NODE_ENV === 'development' ? {
+                error: error.message,
+                stack: error.stack
+            } : undefined
         });
     }
 });
