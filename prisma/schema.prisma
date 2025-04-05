@@ -26,41 +26,52 @@ model Postes {
   id                 String   @id @default(auto()) @map("_id") @db.ObjectId
   usuario            usuarios @relation(fields: [usuarioId], references: [id])
   usuarioId          String   @db.ObjectId
-  coords             String
+  
+  // Coordenadas como campos numéricos separados (MELHORIA IMPORTANTE)
+  latitude           Float
+  longitude          Float
+  
+  // Dados de localização
   cidade             String
   endereco           String
   numero             String
   cep                String
-  isLastPost         Boolean
+  isLastPost         Boolean  @default(false)
   localizacao        String?
+  
+  // Dados técnicos (converti para tipos mais apropriados)
   transformador      String?
-  medicao           String?
-  telecom           String?
-  concentrador      String?
-  poste             String?
-  alturaposte       String?
-  estruturaposte    String?
-  tipoBraco         String?
-  tamanhoBraco      String?
-  quantidadePontos  String?
-  tipoLampada       String?
-  potenciaLampada   String?
-  tipoReator        String?
-  tipoComando       String?
-  tipoRede          String?
-  tipoCabo          String?
-  numeroFases       String?
-  tipoVia           String?
-  hierarquiaVia     String?
-  tipoPavimento     String?
-  quantidadeFaixas  String?
-  tipoPasseio       String?
-  canteiroCentral   String?
+  medicao            String?
+  telecom            String?
+  concentrador       String?
+  poste              String?
+  alturaposte        Float?   // Melhor como número
+  estruturaposte     String?
+  tipoBraco          String?
+  tamanhoBraco       Float?   // Melhor como número
+  quantidadePontos   Int?     // Melhor como inteiro
+  tipoLampada        String?
+  potenciaLampada    Int?     // Melhor como inteiro (watts)
+  tipoReator         String?
+  tipoComando        String?
+  tipoRede           String?
+  tipoCabo           String?
+  numeroFases        Int?     // Melhor como inteiro
+  tipoVia            String?
+  hierarquiaVia      String?
+  tipoPavimento      String?
+  quantidadeFaixas   Int?     // Melhor como inteiro
+  tipoPasseio        String?
+  canteiroCentral    Boolean? // Melhor como booleano
   finalidadeInstalacao String?
-  especieArvore     String?
-  createdAt         DateTime @default(now())
-   updatedAt DateTime @updatedAt
-  fotos             Foto[]
+  especieArvore      String?
+  
+  // Timestamps
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+  
+  // Relações
+  fotos              Foto[]
 }
 
 model Foto {
