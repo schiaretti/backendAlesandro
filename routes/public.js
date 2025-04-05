@@ -89,7 +89,12 @@ router.get('/listar-postes', async (req, res) => {
     try {
         const { page = 1, limit = 1000 } = req.query;
 
+        // 1. Busca os postes com tratamento para campos não-nulos
         const postes = await prisma.postes.findMany({
+            where: {
+                latitude: { not: null },  // Filtra apenas registros com latitude válida
+                longitude: { not: null }  // Filtra apenas registros com longitude válida
+            },
             select: {
                 id: true,
                 latitude: true,
@@ -103,31 +108,14 @@ router.get('/listar-postes', async (req, res) => {
             take: Number(limit)
         });
 
-        // Validação e formatação dos dados
-        const postesFormatados = postes.map(poste => {
-            // Combina latitude e longitude em um array coords
-            const coords = [poste.latitude, poste.longitude];
-            
-            // Validação robusta das coordenadas
-            const isValidCoordinate = (coord, min, max) => 
-                coord !== null && 
-                !isNaN(coord) && 
-                coord >= min && 
-                coord <= max;
-
-            if (!isValidCoordinate(coords[0], -90, 90) || !isValidCoordinate(coords[1], -180, 180)) {
-                console.warn(`Poste ${poste.id} com coordenadas inválidas:`, coords);
-                return null;
-            }
-
-            return {
-                id: poste.id,
-                endereco: poste.endereco,
-                cidade: poste.cidade,
-                coords: coords,
-                createdAt: poste.createdAt
-            };
-        }).filter(Boolean);
+        // 2. Formatação dos dados (agora seguro pois os valores não são nulos)
+        const postesFormatados = postes.map(poste => ({
+            id: poste.id,
+            endereco: poste.endereco,
+            cidade: poste.cidade,
+            coords: [poste.latitude, poste.longitude],
+            createdAt: poste.createdAt
+        }));
 
         res.json({
             success: true,
