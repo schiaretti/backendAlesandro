@@ -181,7 +181,7 @@ router.post('/postes', handleUpload({maxFiles: 5 }), async (req, res) => {
             PANORAMICA: 'PANORAMICA',
             LUMINARIA: 'LUMINARIA',
             ARVORE: 'ARVORE',
-            TELECON: 'TELECON',
+            TELECOM: 'TELECOM',
             LAMPADA: 'LAMPADA',
         };
 
