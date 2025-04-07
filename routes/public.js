@@ -2,10 +2,8 @@ import express from 'express'
 import { PrismaClient } from '@prisma/client'
 import bcrypt, { hash } from 'bcrypt'
 import jwt from 'jsonwebtoken'
-import upload from '../middlewares/fileUpload.js';
 import fs from 'fs';
-import path from 'path'; // Importe path também para lidar com caminhos
-import { handleUpload } from '../middlewares/fileUpload.js';
+import { handleUpload, cleanUploads } from '../middlewares/fileUpload.js';
 
 const prisma = new PrismaClient()
 const router = express.Router()
@@ -45,7 +43,7 @@ router.post('/login', async (req, res) => {
         if (!senhaValida) {
             return res.status(401).json({
                 success: false,
-                message: 'Credenciais inválidas',  
+                message: 'Credenciais inválidas',
                 code: 'INVALID_CREDENTIALS'
             });
         }
@@ -139,7 +137,7 @@ router.get('/listar-postes', async (req, res) => {
     }
 });
 
-router.post('/postes', handleUpload('fotos', 5), async (req, res) => {
+router.post('/postes', handleUpload({maxFiles: 5 }), async (req, res) => {
     try {
         const { body, files } = req;
 
@@ -187,18 +185,16 @@ router.post('/postes', handleUpload('fotos', 5), async (req, res) => {
             LAMPADA: 'LAMPADA',
         };
 
-        // Modifique a parte de tratamento de fotos para:
-        const photoTypes = req.body.tipo_fotos || [];
+        // Verificação de fotos obrigatórias
         const requiredPhotos = ['PANORAMICA', 'LUMINARIA'];
+        const uploadedTypes = req.files?.map(f => f.tipo) || [];
 
         const missingPhotos = requiredPhotos.filter(type =>
-            !photoTypes.includes(type)
+            !uploadedTypes.includes(type)
         );
 
-
-
         if (missingPhotos.length > 0) {
-            cleanUploads(files);
+            cleanUploads(req.files);
             return res.status(400).json({
                 success: false,
                 message: `Fotos obrigatórias faltando: ${missingPhotos.join(', ')}`,
@@ -251,18 +247,16 @@ router.post('/postes', handleUpload('fotos', 5), async (req, res) => {
                     tipoPasseio: body.tipoPasseio,
                     finalidadeInstalacao: body.finalidadeInstalacao,
                     especieArvore: body.especieArvore,
-
-                    // Fotos
                     fotos: {
-                        create: files?.map((file, index) => ({
+                        create: req.files?.map(file => ({
                             url: `/uploads/${file.filename}`,
-                            tipo: photoTypes[index] || 'OUTRO',
+                            tipo: file.tipo,
                             coords: JSON.stringify([latitude, longitude])
                         }))
                     }
-                },
-                include: { fotos: true }
+                }
             });
+        
 
             return poste;
         });
@@ -273,7 +267,9 @@ router.post('/postes', handleUpload('fotos', 5), async (req, res) => {
         });
 
     } catch (error) {
+
         cleanUploads(req.files);
+
         console.error('Erro ao criar poste:', {
             message: error.message,
             stack: error.stack,
@@ -292,25 +288,7 @@ router.post('/postes', handleUpload('fotos', 5), async (req, res) => {
     }
 });
 
-// Função auxiliar para limpar uploads em caso de erro
-function cleanUploads(files) {
-    if (!files?.length) return;
 
-    files.forEach(file => {
-        try {
-            // Verifica se o arquivo existe antes de tentar deletar
-            if (fs.existsSync(file.path)) {
-                fs.unlinkSync(file.path);
-                console.log(`Arquivo removido: ${file.path}`);
-            } else {
-                console.warn(`Arquivo não encontrado: ${file.path}`);
-            }
-        } catch (err) {
-            console.error(`Erro ao limpar arquivo ${file.path}:`, err.message);
-            // Não é necessário lançar o erro novamente
-        }
-    });
-}
 
 
 export default router
