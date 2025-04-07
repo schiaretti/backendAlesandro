@@ -45,7 +45,7 @@ router.post('/login', async (req, res) => {
         if (!senhaValida) {
             return res.status(401).json({
                 success: false,
-                message: 'Credenciais inválidas',
+                message: 'Credenciais inválidas',  
                 code: 'INVALID_CREDENTIALS'
             });
         }
