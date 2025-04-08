@@ -183,7 +183,10 @@ router.post('/postes', handleUpload({maxFiles: 5 }), async (req, res) => {
             ARVORE: 'ARVORE',
             TELECOM: 'TELECOM',
             LAMPADA: 'LAMPADA',
+            OUTRO: 'OUTRO'
         };
+
+        
 
         // Verificação de fotos obrigatórias
         const requiredPhotos = ['PANORAMICA', 'LUMINARIA'];
