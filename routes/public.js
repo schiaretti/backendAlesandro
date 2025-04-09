@@ -242,7 +242,7 @@ router.post('/postes', handleUpload({maxFiles: 5 }), async (req, res) => {
                     tipoComando: body.tipoComando,
                     tipoRede: body.tipoRede,
                     tipoCabo: body.tipoCabo,
-                    numeroFases: body.numeroFases ? parseInt(body.numeroFases) : null,
+                    numeroFases: body.numeroFases,
                     tipoVia: body.tipoVia,
                     hierarquiaVia: body.hierarquiaVia,
                     tipoPavimento: body.tipoPavimento,
