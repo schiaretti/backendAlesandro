@@ -137,7 +137,7 @@ router.get('/listar-postes', async (req, res) => {
     }
 });
 
-router.post('/postes', handleUpload({maxFiles: 5 }), async (req, res) => {
+/*router.post('/postes', handleUpload({maxFiles: 5 }), async (req, res) => {
     try {
         const { body, files } = req;
 
@@ -278,6 +278,180 @@ router.post('/postes', handleUpload({maxFiles: 5 }), async (req, res) => {
             stack: error.stack,
             body: req.body
         });
+
+        res.status(500).json({
+            success: false,
+            message: 'Erro interno no servidor',
+            code: 'INTERNAL_SERVER_ERROR',
+            details: process.env.NODE_ENV === 'development' ? {
+                error: error.message,
+                stack: error.stack
+            } : undefined
+        });
+    }
+});*/
+
+router.post('/postes', handleUpload({ maxFiles: 5 }), async (req, res) => {
+    try {
+        const { body, files } = req;
+
+        // 1. Validação dos campos obrigatórios (incluindo numeroIdentificacao)
+        const requiredFields = ['cidade', 'endereco', 'numero', 'usuarioId', 'numeroIdentificacao'];
+        const missingFields = requiredFields.filter(field => !body[field]);
+
+        if (missingFields.length > 0) {
+            cleanUploads(files);
+            return res.status(400).json({
+                success: false,
+                message: `Campos obrigatórios faltando: ${missingFields.join(', ')}`,
+                code: 'MISSING_REQUIRED_FIELDS'
+            });
+        }
+
+        // 2. Validação do formato do numeroIdentificacao
+        if (!/^\d{5}-\d{1}$/.test(body.numeroIdentificacao)) {
+            cleanUploads(files);
+            return res.status(400).json({
+                success: false,
+                message: 'Formato do número do poste inválido. Deve ser XXXXX-X (5 dígitos, traço, 1 dígito)',
+                code: 'INVALID_POST_NUMBER_FORMAT'
+            });
+        }
+
+        // 3. Validação das coordenadas
+        let latitude, longitude;
+        try {
+            const coords = body.coords ? JSON.parse(body.coords) : [null, null];
+            latitude = parseFloat(coords[0]);
+            longitude = parseFloat(coords[1]);
+
+            if (isNaN(latitude) || isNaN(longitude) ||
+                latitude < -90 || latitude > 90 ||
+                longitude < -180 || longitude > 180) {
+                throw new Error('Valores inválidos');
+            }
+        } catch (error) {
+            cleanUploads(files);
+            return res.status(400).json({
+                success: false,
+                message: 'Coordenadas inválidas. Formato esperado: [latitude, longitude] com valores numéricos',
+                code: 'INVALID_COORDINATES'
+            });
+        }
+
+        // Tipos de foto permitidos
+        const TIPOS_FOTO = {
+            PANORAMICA: 'PANORAMICA',
+            LUMINARIA: 'LUMINARIA',
+            ARVORE: 'ARVORE',
+            TELECOM: 'TELECOM',
+            LAMPADA: 'LAMPADA',
+            OUTRO: 'OUTRO'
+        };
+
+        // Verificação de fotos obrigatórias
+        const requiredPhotos = ['PANORAMICA', 'LUMINARIA'];
+        const uploadedTypes = req.files?.map(f => f.tipo) || [];
+
+        const missingPhotos = requiredPhotos.filter(type =>
+            !uploadedTypes.includes(type)
+        );
+
+        if (missingPhotos.length > 0) {
+            cleanUploads(req.files);
+            return res.status(400).json({
+                success: false,
+                message: `Fotos obrigatórias faltando: ${missingPhotos.join(', ')}`,
+                code: 'MISSING_REQUIRED_PHOTOS'
+            });
+        }
+
+        // 4. Criação do poste com transação
+        const result = await prisma.$transaction(async (prisma) => {
+            const poste = await prisma.postes.create({
+                data: {
+                    // Campo de identificação único (ADICIONADO)
+                    numeroIdentificacao: body.numeroIdentificacao,
+                    
+                    // Campos de localização
+                    latitude: latitude,
+                    longitude: longitude,
+                    cidade: body.cidade,
+                    endereco: body.endereco,
+                    numero: body.numero,
+                    cep: body.cep,
+
+                    // Campos booleanos
+                    isLastPost: body.isLastPost === 'true',
+                    canteiroCentral: body.canteiroCentral === 'true',
+
+                    // Relacionamento
+                    usuarioId: body.usuarioId,
+
+                    // Demais campos
+                    localizacao: body.localizacao,
+                    transformador: body.transformador,
+                    medicao: body.medicao,
+                    telecom: body.telecom,
+                    concentrador: body.concentrador,
+                    poste: body.poste,
+                    alturaposte: body.alturaposte ? parseFloat(body.alturaposte) : null,
+                    estruturaposte: body.estruturaposte,
+                    tipoBraco: body.tipoBraco,
+                    tamanhoBraco: body.tamanhoBraco ? parseFloat(body.tamanhoBraco) : null,
+                    quantidadePontos: body.quantidadePontos ? parseInt(body.quantidadePontos) : null,
+                    tipoLampada: body.tipoLampada,
+                    potenciaLampada: body.potenciaLampada ? parseInt(body.potenciaLampada) : null,
+                    tipoReator: body.tipoReator,
+                    tipoComando: body.tipoComando,
+                    tipoRede: body.tipoRede,
+                    tipoCabo: body.tipoCabo,
+                    numeroFases: body.numeroFases,
+                    tipoVia: body.tipoVia,
+                    hierarquiaVia: body.hierarquiaVia,
+                    tipoPavimento: body.tipoPavimento,
+                    quantidadeFaixas: body.quantidadeFaixas ? parseInt(body.quantidadeFaixas) : null,
+                    tipoPasseio: body.tipoPasseio,
+                    finalidadeInstalacao: body.finalidadeInstalacao,
+                    especieArvore: body.especieArvore,
+                    fotos: {
+                        create: req.files?.map(file => ({
+                            url: `/uploads/${file.filename}`,
+                            tipo: file.tipo,
+                            coords: JSON.stringify([latitude, longitude])
+                        }))
+                    }
+                },
+                include: {
+                    fotos: true
+                }
+            });
+
+            return poste;
+        });
+
+        res.status(201).json({
+            success: true,
+            data: result
+        });
+
+    } catch (error) {
+        cleanUploads(req.files);
+
+        console.error('Erro ao criar poste:', {
+            message: error.message,
+            stack: error.stack,
+            body: req.body
+        });
+
+        // Tratamento específico para violação de campo único
+        if (error.code === 'P2002' && error.meta?.target?.includes('numeroIdentificacao')) {
+            return res.status(400).json({
+                success: false,
+                message: 'Número do poste já existe no sistema',
+                code: 'DUPLICATE_POST_NUMBER'
+            });
+        }
 
         res.status(500).json({
             success: false,
