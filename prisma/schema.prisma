@@ -24,6 +24,7 @@ model usuarios {
 
 model Postes {
   id                 String   @id @default(auto()) @map("_id") @db.ObjectId
+  numeroIdentificacao String  @unique
   usuario            usuarios @relation(fields: [usuarioId], references: [id])
   usuarioId          String   @db.ObjectId
   
