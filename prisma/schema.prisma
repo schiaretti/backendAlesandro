@@ -44,7 +44,7 @@ model Postes {
   // Dados técnicos (converti para tipos mais apropriados)
   transformador      String?
   medicao            String?
-  telecom            String?
+  telecom            String? 
   concentrador       String?
   poste              String?
   alturaposte        Float?   // Melhor como número
