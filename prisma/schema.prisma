@@ -22,27 +22,21 @@ model usuarios {
   postes Postes[]
 }
 
+
 model Postes {
   id                 String   @id @default(auto()) @map("_id") @db.ObjectId
   numeroIdentificacao String  @unique
   usuario            usuarios @relation(fields: [usuarioId], references: [id])
   usuarioId          String   @db.ObjectId
-  
-  // Coordenadas como campos numéricos separados (MELHORIA IMPORTANTE)
   latitude           Float?
   longitude          Float?
-  @@index([latitude, longitude], name: "coords_index")
-  
-  // Dados de localização
   cidade             String
   endereco           String
   numero             String
   cep                String
   isLastPost         Boolean  @default(false)
   localizacao        String?
-  
-  // Dados técnicos (converti para tipos mais apropriados)
-  emFrente           String?
+   emFrente           String?
   transformador      String?
   medicao            String?
   telecom            String? 
@@ -67,29 +61,49 @@ model Postes {
   tipoPasseio        String?
   canteiroCentral    Boolean? // Melhor como booleano
   finalidadeInstalacao String?
-  especieArvore      String?
   
-  // Timestamps
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
   
   // Relações
   fotos              Foto[]
+  arvores            Arvore[]
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+}
+
+model Arvore {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  poste       Postes   @relation(fields: [posteId], references: [id])
+  posteId     String   @db.ObjectId
+  especie     String
+  latitude    Float
+  longitude   Float
+  fotos       FotoArvore[]
+  descricao   String?
+  createdAt   DateTime @default(now())
+  @@index([posteId], name: "arvore_poste_index")
 }
 
 model Foto {
   id        String   @id @default(auto()) @map("_id") @db.ObjectId
   url       String
   tipo      FotoTipo
-  coords    String?  // Coordenadas no formato "[lat, lng]"
   poste     Postes   @relation(fields: [posteId], references: [id])
   posteId   String   @db.ObjectId
   createdAt DateTime @default(now())
 }
 
+model FotoArvore {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  url       String
+  arvore    Arvore   @relation(fields: [arvoreId], references: [id])
+  arvoreId  String   @db.ObjectId
+  latitude  Float?
+  longitude Float?
+  createdAt DateTime @default(now())
+}
+
 enum FotoTipo {
   PANORAMICA
-  ARVORE
   LUMINARIA
   TELECOM
   LAMPADA
