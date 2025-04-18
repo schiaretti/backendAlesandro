@@ -95,6 +95,7 @@ router.get('/listar-postes', async (req, res) => {
             },
             select: {
                 id: true,
+                numeroIdentificacao: true,
                 latitude: true,
                 longitude: true,
                 endereco: true,
@@ -109,10 +110,12 @@ router.get('/listar-postes', async (req, res) => {
         // 2. Formatação dos dados (agora seguro pois os valores não são nulos)
         const postesFormatados = postes.map(poste => ({
             id: poste.id,
+            numeroIdentificacao: poste.numeroIdentificacao,
             endereco: poste.endereco,
             cidade: poste.cidade,
             coords: [poste.latitude, poste.longitude],
             createdAt: poste.createdAt
+          
         }));
 
         res.json({
