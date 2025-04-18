@@ -389,6 +389,7 @@ router.post('/postes', handleUpload({ maxFiles: 5 }), async (req, res) => {
                     usuarioId: body.usuarioId,
 
                     // Demais campos
+                    emFrente: body.emFrente,
                     localizacao: body.localizacao,
                     transformador: body.transformador,
                     medicao: body.medicao,
