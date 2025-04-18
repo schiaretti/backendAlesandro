@@ -42,6 +42,7 @@ model Postes {
   localizacao        String?
   
   // Dados técnicos (converti para tipos mais apropriados)
+  emFrente           String?
   transformador      String?
   medicao            String?
   telecom            String? 
