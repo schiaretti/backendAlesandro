@@ -36,7 +36,7 @@ model Postes {
   cep                String
   isLastPost         Boolean  @default(false)
   localizacao        String?
-   emFrente           String?
+  emFrente           String?
   transformador      String?
   medicao            String?
   telecom            String? 

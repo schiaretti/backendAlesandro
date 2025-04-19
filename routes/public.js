@@ -10,6 +10,8 @@ const router = express.Router()
 const JWT_SECRET = process.env.JWT_SECRET
 
 
+
+
 // Rota de login corrigida
 router.post('/login', async (req, res) => {
     try {
@@ -315,8 +317,27 @@ router.post('/login', async (req, res) => {
     }
 });*/
 router.post('/postes', handleUpload({ maxFiles: 10 }), async (req, res) => {
+
+    // Adicione no início do endpoint
+    console.log('Dados recebidos:', {
+        body: req.body,
+        files: {
+            normais: fotosNormais.length,
+            arvores: fotosArvore.length
+        },
+        arvoresData
+    });
     try {
-        const { body, files } = req;
+
+        // Todos os arquivos (fotos normais e de árvores)
+        console.log('Todos os arquivos:', req.allFiles);
+
+        // Acesso específico por tipo:
+        const fotosNormais = req.files?.fotos || [];
+        const fotosArvore = req.files?.fotosArvore || [];
+
+        const { body } = req; // Removido files da desestruturação
+
 
         // 1. Validação reforçada dos campos obrigatórios
         const requiredFields = {
@@ -339,6 +360,8 @@ router.post('/postes', handleUpload({ maxFiles: 10 }), async (req, res) => {
                 code: 'MISSING_REQUIRED_FIELDS'
             });
         }
+
+
 
         // 2. Validação do número do poste
         const postNumberRegex = /^\d{5}-\d{1}$/;
@@ -397,7 +420,8 @@ router.post('/postes', handleUpload({ maxFiles: 10 }), async (req, res) => {
 
         // 5. Validação de fotos obrigatórias
         const requiredPhotoTypes = ['PANORAMICA', 'LUMINARIA'];
-        const uploadedPhotoTypes = files?.map(f => f.tipo?.toUpperCase().trim()).filter(Boolean) || [];
+        // Modifique para considerar apenas fotosNormais
+        const uploadedPhotoTypes = fotosNormais.map(f => f.tipo?.toUpperCase().trim()).filter(Boolean);
 
         const missingPhotoTypes = requiredPhotoTypes.filter(
             type => !uploadedPhotoTypes.includes(type)
@@ -451,34 +475,55 @@ router.post('/postes', handleUpload({ maxFiles: 10 }), async (req, res) => {
 
         // 7. Processamento em transação
         const result = await prisma.$transaction(async (prisma) => {
-            // Cria o poste principal
-            const poste = await prisma.postes.create({
-                data: {
-                    ...posteData,
-                    fotos: {
-                        create: preparePostPhotos(files)
+            try {
+                // Cria o poste principal
+                const poste = await prisma.postes.create({
+                    data: {
+                        ...posteData,
+                        fotos: {
+                            create: preparePostPhotos(files)
+                        },
+                        arvores: {
+                            create: prepareTreesData(arvoresData, files)
+                        }
                     },
-                    arvores: {
-                        create: prepareTreesData(arvoresData, files)
-                    }
-                },
-                include: {
-                    fotos: true,
-                    arvores: {
-                        include: {
-                            fotos: true
+                    include: {
+                        fotos: true,
+                        arvores: {
+                            include: {
+                                fotos: true
+                            }
                         }
                     }
-                }
-            });
+                });
 
-            return poste;
+                return poste;
+            } catch (error) {
+                console.error('Erro detalhado na transação:', {
+                    error: error.message,
+                    stack: error.stack,
+                    arvoresData,
+                    files: files.map(f => ({
+                        filename: f.filename,
+                        fieldname: f.fieldname,
+                        originalname: f.originalname
+                    }))
+                });
+                throw error;
+            }
         });
 
         // 8. Resposta de sucesso
         return res.status(201).json({
             success: true,
-            data: result,
+            data: {
+                ...result,
+                stats: {
+                    fotos: result.fotos.length,
+                    arvores: result.arvores.length,
+                    fotosArvores: result.arvores.reduce((acc, curr) => acc + curr.fotos.length, 0)
+                }
+            },
             message: 'Poste cadastrado com sucesso'
         });
 
@@ -563,7 +608,17 @@ function preparePostPhotos(files) {
 function prepareTreesData(arvoresData, files) {
     return arvoresData.map(arvore => {
         if (!arvore.especie?.trim()) {
-            throw new Error('Espécie da árvore não informada');
+            throw new Error(`Espécie não informada para árvore com tempId: ${arvore.tempId}`);
+        }
+
+        if (isNaN(arvore.latitude) || isNaN(arvore.longitude)) {
+            throw new Error(`Coordenadas inválidas para árvore ${arvore.tempId}`);
+        }
+
+        // Verifica se há fotos para esta árvore
+        const treePhotos = prepareTreePhotos(arvore.tempId, files);
+        if (treePhotos.length === 0) {
+            console.warn(`Árvore ${arvore.tempId} não possui fotos associadas`);
         }
 
         return {
@@ -572,7 +627,7 @@ function prepareTreesData(arvoresData, files) {
             longitude: arvore.longitude ? Number(arvore.longitude) : 0,
             descricao: arvore.descricao?.trim() || null,
             fotos: {
-                create: prepareTreePhotos(arvore.tempId, files)
+                create: treePhotos
             }
         };
     });
@@ -580,16 +635,43 @@ function prepareTreesData(arvoresData, files) {
 
 function prepareTreePhotos(tempId, files) {
     return (files || [])
-        .filter(file =>
-            ['ARVORE', 'ÁRVORE'].includes(file.tipo?.toUpperCase()) &&
-            file.arvoreId === tempId
-        )
-        .map(file => ({
-            url: `/uploads/${file.filename}`,
-            latitude: file.latitude ? Number(file.latitude) : null,
-            longitude: file.longitude ? Number(file.longitude) : null
-        }));
+        .filter(file => {
+            // Verificação mais robusta
+            const isTreePhoto = file.fieldname === 'fotosArvore' ||
+                file.tipo?.toUpperCase() === 'ARVORE';
+            const matchesTree = file.arvoreTempId === tempId ||
+                (file.originalname?.includes(`arvore_${tempId}`));
+
+            return isTreePhoto && matchesTree;
+        })
+        .map(file => {
+            // Extrai metadados do nome do arquivo se necessário
+            let latitude = 0;
+            let longitude = 0;
+
+            try {
+                if (file.originalname?.startsWith('arvore_')) {
+                    const metadata = JSON.parse(file.originalname.replace('arvore_', ''));
+                    latitude = metadata.latitude || 0;
+                    longitude = metadata.longitude || 0;
+                } else {
+                    latitude = file.latitude ? Number(file.latitude) : 0;
+                    longitude = file.longitude ? Number(file.longitude) : 0;
+                }
+            } catch (e) {
+                console.error('Erro ao extrair metadados da foto:', e);
+            }
+
+            return {
+                url: `/uploads/${file.filename}`,
+                latitude,
+                longitude
+            };
+        });
 }
+
+
+
 
 router.get('/listar-postes', async (req, res) => {
     try {
