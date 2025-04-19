@@ -316,7 +316,7 @@ router.post('/login', async (req, res) => {
         });
     }
 });*/
-router.post('/postes', handleUpload({ maxFiles: 10 }), async (req, res) => {
+/*router.post('/postes', handleUpload({ maxFiles: 10 }), async (req, res) => {
 
     // Adicione no início do endpoint
     console.log('Dados recebidos:', {
@@ -785,9 +785,337 @@ router.get('/listar-postes', async (req, res) => {
             } : undefined
         });
     }
+});*/
+
+router.post('/postes', handleUpload({ maxFiles: 10 }), async (req, res) => {
+    try {
+        console.log('Dados recebidos:', {
+            body: req.body,
+            files: {
+                fotos: req.fotos?.length || 0,
+                fotosArvore: req.fotosArvore?.length || 0
+            }
+        });
+
+        const { body } = req;
+        const fotos = req.fotos || [];
+        const fotosArvore = req.fotosArvore || [];
+        const allFiles = [...fotos, ...fotosArvore];
+
+        // 1. Validação de campos obrigatórios
+        const requiredFields = {
+            cidade: 'Cidade',
+            endereco: 'Endereço',
+            numero: 'Número',
+            usuarioId: 'ID do Usuário',
+            numeroIdentificacao: 'Número de Identificação'
+        };
+
+        const missingFields = Object.entries(requiredFields)
+            .filter(([field]) => !body[field]?.toString().trim())
+            .map(([, name]) => name);
+
+        if (missingFields.length > 0) {
+            cleanUploads(allFiles);
+            return res.status(400).json({
+                success: false,
+                message: `Campos obrigatórios faltando: ${missingFields.join(', ')}`,
+                code: 'MISSING_REQUIRED_FIELDS'
+            });
+        }
+
+        // 2. Validação do número do poste
+        const postNumberRegex = /^\d{5}-\d{1}$/;
+        if (!postNumberRegex.test(body.numeroIdentificacao.toString().trim())) {
+            cleanUploads(allFiles);
+            return res.status(400).json({
+                success: false,
+                message: 'Formato inválido para número do poste (XXXXX-X)',
+                code: 'INVALID_POST_NUMBER'
+            });
+        }
+
+        // 3. Parse e validação das árvores
+        let arvoresData = [];
+        try {
+            arvoresData = body.arvores ? JSON.parse(body.arvores) : [];
+
+            if (!Array.isArray(arvoresData)) {
+                throw new Error('Dados das árvores devem ser um array');
+            }
+        } catch (e) {
+            cleanUploads(allFiles);
+            return res.status(400).json({
+                success: false,
+                message: 'Formato inválido para dados das árvores',
+                code: 'INVALID_TREE_DATA',
+                details: process.env.NODE_ENV === 'development' ? e.message : undefined
+            });
+        }
+
+        // 4. Validação de coordenadas do poste
+        let posteLat = null;
+        let posteLng = null;
+        try {
+            const coords = body.coords ? JSON.parse(body.coords) : [null, null];
+            [posteLat, posteLng] = coords.map(coord => coord !== null ? Number(coord) : null);
+
+            if (posteLat !== null && (isNaN(posteLat) || posteLat < -90 || posteLat > 90)) {
+                throw new Error('Latitude fora do intervalo válido (-90 a 90)');
+            }
+
+            if (posteLng !== null && (isNaN(posteLng) || posteLng < -180 || posteLng > 180)) {
+                throw new Error('Longitude fora do intervalo válido (-180 a 180)');
+            }
+        } catch (e) {
+            cleanUploads(allFiles);
+            return res.status(400).json({
+                success: false,
+                message: 'Coordenadas do poste inválidas',
+                code: 'INVALID_COORDINATES',
+                details: process.env.NODE_ENV === 'development' ? e.message : undefined
+            });
+        }
+
+        // 5. Validação de fotos obrigatórias
+        const requiredPhotoTypes = ['PANORAMICA', 'LUMINARIA'];
+        const uploadedPhotoTypes = fotos.map(f => f.tipo?.toUpperCase().trim()).filter(Boolean);
+
+        const missingPhotoTypes = requiredPhotoTypes.filter(
+            type => !uploadedPhotoTypes.includes(type)
+        );
+
+        if (missingPhotoTypes.length > 0) {
+            cleanUploads(allFiles);
+            return res.status(400).json({
+                success: false,
+                message: `Fotos obrigatórias faltando: ${missingPhotoTypes.join(', ')}`,
+                code: 'MISSING_REQUIRED_PHOTOS'
+            });
+        }
+
+        // 6. Preparação dos dados do poste
+        const posteData = {
+            // Informações básicas
+            numeroIdentificacao: body.numeroIdentificacao.toString().trim(),
+            cidade: body.cidade.toString().trim(),
+            endereco: body.endereco.toString().trim(),
+            numero: body.numero.toString().trim(),
+            usuarioId: body.usuarioId.toString().trim(),
+
+            // Coordenadas
+            latitude: posteLat,
+            longitude: posteLng,
+
+            // Informações complementares
+            ...prepareOptionalFields(body, [
+                'cep', 'localizacao', 'emFrente', 'transformador',
+                'medicao', 'telecom', 'concentrador', 'poste',
+                'estruturaposte', 'tipoBraco', 'tipoLampada',
+                'tipoReator', 'tipoComando', 'tipoRede', 'tipoCabo',
+                'numeroFases', 'tipoVia', 'hierarquiaVia', 'tipoPavimento',
+                'tipoPasseio', 'finalidadeInstalacao'
+            ]),
+
+            // Campos numéricos
+            ...prepareNumericFields(body, [
+                { field: 'alturaposte', type: 'float' },
+                { field: 'tamanhoBraco', type: 'float' },
+                { field: 'quantidadePontos', type: 'int' },
+                { field: 'potenciaLampada', type: 'int' },
+                { field: 'quantidadeFaixas', type: 'int' }
+            ]),
+
+            // Campos booleanos
+            isLastPost: convertToBoolean(body.isLastPost),
+            canteiroCentral: convertToBoolean(body.canteiroCentral)
+        };
+
+        // 7. Preparação dos dados para criação
+        const fotosParaCriar = preparePostPhotos(fotos);
+        const arvoresParaCriar = prepareTreesData(arvoresData, fotosArvore);
+
+        // 8. Processamento em transação
+        const result = await prisma.$transaction(async (prisma) => {
+            const poste = await prisma.postes.create({
+                data: {
+                    ...posteData,
+                    fotos: { create: fotosParaCriar },
+                    arvores: { create: arvoresParaCriar }
+                },
+                include: {
+                    fotos: true,
+                    arvores: {
+                        include: {
+                            fotos: true
+                        }
+                    }
+                }
+            });
+            return poste;
+        });
+
+        // 9. Resposta de sucesso
+        return res.status(201).json({
+            success: true,
+            data: {
+                ...result,
+                stats: {
+                    fotos: result.fotos.length,
+                    arvores: result.arvores.length,
+                    fotosArvores: result.arvores.reduce((acc, curr) => acc + curr.fotos.length, 0)
+                }
+            },
+            message: 'Poste cadastrado com sucesso'
+        });
+
+    } catch (error) {
+        cleanUploads(req.fotos?.concat(req.fotosArvore || []));
+
+        // Tratamento específico para erros do Prisma
+        if (error.code === 'P2002') {
+            return res.status(400).json({
+                success: false,
+                message: 'Número do poste já existe no sistema',
+                code: 'DUPLICATE_POST_NUMBER',
+                details: process.env.NODE_ENV === 'development' ? {
+                    target: error.meta?.target
+                } : undefined
+            });
+        }
+
+        // Tratamento de erros do Multer
+        if (error instanceof multer.MulterError) {
+            return res.status(400).json({
+                success: false,
+                message: `Erro no upload: ${error.message}`,
+                code: error.code
+            });
+        }
+
+        // Log detalhado do erro
+        console.error('Erro ao criar poste:', {
+            error: error.message,
+            stack: error.stack,
+            body: req.body,
+            timestamp: new Date().toISOString()
+        });
+
+        // Tratamento genérico de erros
+        return res.status(500).json({
+            success: false,
+            message: 'Erro interno no servidor',
+            code: 'INTERNAL_SERVER_ERROR',
+            details: process.env.NODE_ENV === 'development' ? {
+                error: error.message,
+                stack: error.stack
+            } : undefined
+        });
+    }
 });
 
+// Funções auxiliares
+function prepareOptionalFields(body, fields) {
+    return fields.reduce((acc, field) => {
+        if (body[field] !== undefined && body[field] !== null) {
+            acc[field] = body[field].toString().trim();
+        } else {
+            acc[field] = null;
+        }
+        return acc;
+    }, {});
+}
 
+function prepareNumericFields(body, fields) {
+    return fields.reduce((acc, { field, type }) => {
+        if (body[field] !== undefined && body[field] !== null && body[field] !== '') {
+            acc[field] = type === 'float' 
+                ? parseFloat(body[field]) 
+                : parseInt(body[field]);
+        } else {
+            acc[field] = null;
+        }
+        return acc;
+    }, {});
+}
 
+function convertToBoolean(value) {
+    if (value === undefined || value === null) return false;
+    if (typeof value === 'boolean') return value;
+    return value.toString().toLowerCase() === 'true';
+}
+
+function preparePostPhotos(files) {
+    return (files || [])
+        .filter(file => file.tipo && !['ARVORE', 'ÁRVORE'].includes(file.tipo.toUpperCase()))
+        .map(file => ({
+            url: `/uploads/${file.filename}`,
+            tipo: file.tipo.toUpperCase()
+        }));
+}
+
+function prepareTreesData(arvoresData, files) {
+    return arvoresData.map(arvore => {
+        if (!arvore.especie?.trim()) {
+            throw new Error(`Espécie não informada para árvore com tempId: ${arvore.tempId}`);
+        }
+
+        if (isNaN(arvore.latitude) || isNaN(arvore.longitude)) {
+            throw new Error(`Coordenadas inválidas para árvore ${arvore.tempId}`);
+        }
+
+        const treePhotos = prepareTreePhotos(arvore.tempId, files);
+        if (treePhotos.length === 0) {
+            console.warn(`Árvore ${arvore.tempId} não possui fotos associadas`);
+        }
+
+        return {
+            especie: arvore.especie.trim(),
+            latitude: arvore.latitude ? Number(arvore.latitude) : 0,
+            longitude: arvore.longitude ? Number(arvore.longitude) : 0,
+            descricao: arvore.descricao?.trim() || null,
+            fotos: {
+                create: treePhotos
+            }
+        };
+    });
+}
+
+function prepareTreePhotos(tempId, files) {
+    return (files || [])
+        .filter(file => {
+            const isTreePhoto = file.fieldname === 'fotosArvore' || 
+                file.tipo?.toUpperCase() === 'ARVORE';
+            const matchesTree = file.arvoreTempId === tempId || 
+                (file.originalname?.includes(`arvore_${tempId}`));
+
+            return isTreePhoto && matchesTree;
+        })
+        .map(file => {
+            let latitude = 0;
+            let longitude = 0;
+
+            try {
+                if (file.originalname?.startsWith('arvore_')) {
+                    const metadata = JSON.parse(file.originalname.replace('arvore_', ''));
+                    latitude = metadata.latitude || 0;
+                    longitude = metadata.longitude || 0;
+                } else {
+                    latitude = file.latitude ? Number(file.latitude) : 0;
+                    longitude = file.longitude ? Number(file.longitude) : 0;
+                }
+            } catch (e) {
+                console.error('Erro ao extrair metadados da foto:', e);
+            }
+
+            return {
+                url: `/uploads/${file.filename}`,
+                latitude,
+                longitude
+            };
+        });
+}
 
 export default router
+       
+
