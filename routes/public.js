@@ -322,7 +322,7 @@ router.post('/postes', handleUpload({ maxFiles: 10 }), async (req, res) => {
     console.log('Dados recebidos:', {
         body: req.body,
         files: {
-            normais: fotosNormais.length,
+            normais: fotos.length,
             arvores: fotosArvore.length
         },
         arvoresData

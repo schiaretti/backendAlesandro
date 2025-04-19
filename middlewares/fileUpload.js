@@ -132,84 +132,31 @@ export const cleanUploads = (files) => {
 
 // 3. Depois definimos handleUpload
 export const handleUpload = (options = {}) => {
-    const uploader = multer({
-        storage,
-        fileFilter,
-        limits: {
-            fileSize: options.fileSize || 10 * 1024 * 1024, // 5MB
-            files: options.maxFiles || 10
-        }
-    });
-
     return (req, res, next) => {
-        console.log('Corpo recebido:', Object.keys(req.body));
-        console.log('Campos de arquivo recebidos:', Object.keys(req.files || {}));
-        const fields = [          
-            { name: 'fotos', maxCount: 8 },
-            { name: 'fotosArvore', maxCount: 5 }
-        ];
-
+        console.log('Incoming headers:', req.headers);
+        
         uploader.fields([
             { name: 'fotos', maxCount: 8 },
             { name: 'fotosArvore', maxCount: 5 }
         ])(req, res, (err) => {
             if (err) {
-                // Normaliza o nome do campo removendo espaços
-                const receivedField = err.field?.trim();
-                
-                if (err.code === 'LIMIT_UNEXPECTED_FILE') {
-                    return res.status(400).json({
-                        success: false,
-                        message: `Use apenas 'fotos' e 'fotosArvore'. Campo recebido: '${receivedField}'`,
-                        code: 'INVALID_FIELD_NAME',
-                        receivedField,
-                        expectedFields: ['fotos', 'fotosArvore']
-                    });
-                }
-                cleanUploads(Object.values(req.files || {}).flat());
-                const errorMap = {
-                    LIMIT_FILE_SIZE: 'Tamanho máximo do arquivo excedido (5MB)',
-                    LIMIT_FILE_COUNT: 'Número máximo de arquivos excedido',
-                    LIMIT_FIELD_KEY: 'Campo de upload não permitido',
-                };
-
+                console.error('Multer error:', {
+                    code: err.code,
+                    field: err.field,
+                    stack: err.stack
+                });
                 return res.status(400).json({
                     success: false,
-                    message: errorMap[err.code] || 'Erro no upload de arquivos',
-                    code: err.code || 'UPLOAD_ERROR',
-                    details: process.env.NODE_ENV === 'development' ? err.message : undefined
+                    message: `Erro no upload: ${err.message}`,
+                    code: err.code
                 });
             }
 
-            if (req.files?.fotos && req.body.tipos) {
-                const tipos = Array.isArray(req.body.tipos) ? req.body.tipos : [req.body.tipos];
-                req.files.fotos.forEach((file, index) => {
-                    file.tipo = tipos[index] || 'OUTRO';
-                    file.fieldname = 'fotos';
-                });
-            }
+            console.log('Files received:', {
+                fotos: req.files?.fotos?.map(f => f.originalname),
+                fotosArvore: req.files?.fotosArvore?.map(f => f.originalname)
+            });
 
-            if (req.files?.fotosArvore) {
-                req.files.fotosArvore.forEach(file => {
-                    file.tipo = 'ARVORE';
-                    file.fieldname = 'fotosArvore';
-                    
-                    if (file.originalname?.startsWith('arvore_')) {
-                        try {
-                            const metadata = JSON.parse(
-                                file.originalname.replace('arvore_', '')
-                            );
-                            file.arvoreTempId = metadata.tempId;
-                            file.latitude = metadata.latitude;
-                            file.longitude = metadata.longitude;
-                        } catch (e) {
-                            console.error('Erro ao extrair metadados:', e);
-                        }
-                    }
-                });
-            }
-
-            req.allFiles = Object.values(req.files || {}).flat();
             next();
         });
     };
