@@ -22,18 +22,17 @@ model usuarios {
   postes Postes[]
 }
 
+
 model Postes {
   id                 String   @id @default(auto()) @map("_id") @db.ObjectId
   numeroIdentificacao String  @unique
   usuario            usuarios @relation(fields: [usuarioId], references: [id])
   usuarioId          String   @db.ObjectId
   
-  // Coordenadas como campos numéricos separados (MELHORIA IMPORTANTE)
+  // Coordenadas principais do poste
   latitude           Float?
   longitude          Float?
   @@index([latitude, longitude], name: "coords_index")
-  
-  // Dados de localização
   cidade             String
   endereco           String
   numero             String
@@ -70,10 +69,7 @@ model Postes {
   especieArvore      String?
   distanciaEntrePostes  Int?
   
-  // Timestamps
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
-  
+
   // Relações
   fotos              Foto[]
 }
@@ -82,10 +78,24 @@ model Foto {
   id        String   @id @default(auto()) @map("_id") @db.ObjectId
   url       String
   tipo      FotoTipo
-  coords    String?  // Coordenadas no formato "[lat, lng]"
+  
+  // Coordenadas da foto (pode ser diferente do poste)
+  fotoLatitude  Float?
+  fotoLongitude Float?
+  
+  // Metadados específicos para árvores
+  especieArvore String?
+  idUnicoArvore String? @unique
+  
+  // Relacionamento
   poste     Postes   @relation(fields: [posteId], references: [id])
   posteId   String   @db.ObjectId
+  
+  // Timestamps
   createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  @@index([fotoLatitude, fotoLongitude], name: "foto_coords_index")
 }
 
 enum FotoTipo {
