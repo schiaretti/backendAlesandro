@@ -25,6 +25,7 @@ export const cleanUploads = (files) => {
 const storage = multer.diskStorage({
     destination: (req, file, cb) => {
         const uploadDir = path.join(__dirname, '../uploads');
+        console.log('Destination:', uploadDir); // <-- Adicione este log
         fs.mkdirSync(uploadDir, { recursive: true });
         cb(null, uploadDir);
     },
@@ -53,12 +54,13 @@ export const handleUpload = (options = {}) => {
         fileFilter,
         limits: {
             fileSize: options.fileSize || 5 * 1024 * 1024, // 5MB
-            files: options.maxFiles || 5
+            files: options.maxFiles || 10
         }
     });
 
     return (req, res, next) => {
         uploader.array('fotos')(req, res, (err) => {
+            console.log('Uploaded files:', req.files); // <-- Adicione este log
             if (err) {
                 cleanUploads(req.files);
                 const errorMap = {

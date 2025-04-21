@@ -294,7 +294,7 @@ router.get('/listar-postes', async (req, res) => {
     }
 });*/
 
-router.post('/postes', handleUpload({ maxFiles: 5 }), async (req, res) => {
+router.post('/postes', handleUpload({ maxFiles: 10 }), async (req, res) => {
     try {
         const { body, files } = req;
 

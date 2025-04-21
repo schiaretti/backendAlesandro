@@ -68,6 +68,7 @@ model Postes {
   canteiroCentral    Boolean? // Melhor como booleano
   finalidadeInstalacao String?
   especieArvore      String?
+  distanciaEntrePostes  Int?
   
   // Timestamps
   createdAt          DateTime @default(now())
