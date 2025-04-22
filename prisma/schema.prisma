@@ -85,7 +85,7 @@ model Foto {
   
   // Metadados específicos para árvores
   especieArvore String?
-  idUnicoArvore String? @unique
+ 
   
   // Relacionamento
   poste     Postes   @relation(fields: [posteId], references: [id])
@@ -95,7 +95,8 @@ model Foto {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   
-  @@index([fotoLatitude, fotoLongitude], name: "foto_coords_index")
+ // Índice composto para buscar árvores por coordenadas + poste
+  @@index([fotoLatitude, fotoLongitude, posteId], name: "foto_coords_index")
 }
 
 enum FotoTipo {

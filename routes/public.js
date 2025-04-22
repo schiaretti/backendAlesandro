@@ -5,34 +5,6 @@ import jwt from 'jsonwebtoken'
 import fs from 'fs';
 import { handleUpload, cleanUploads } from '../middlewares/fileUpload.js';
 
-const generateTreeId = async (prisma) => {
-    let id;
-    let isUnique = false;
-    let attempts = 0;
-    const maxAttempts = 5;
-
-    while (!isUnique && attempts < maxAttempts) {
-        id = `arv-${Date.now()}-${Math.random().toString(36).substr(2, 8)}`;
-
-        // Verifica se o ID já existe no banco
-        const existing = await prisma.foto.findUnique({
-            where: { idUnicoArvore: id }
-        });
-
-        if (!existing) {
-            isUnique = true;
-        }
-
-        attempts++;
-    }
-
-    if (!isUnique) {
-        throw new Error('Não foi possível gerar um ID único para a árvore após várias tentativas');
-    }
-
-    return id;
-};
-
 
 const prisma = new PrismaClient()
 const router = express.Router()
@@ -473,7 +445,6 @@ router.post('/postes', handleUpload({ maxFiles: 10 }), async (req, res) => {
         };
 
         const especies = processArrayField(body.especies);
-        const idsUnicos = processArrayField(body.idsUnicos);
         const coordsArvores = processArrayField(body.coordsArvore);
 
         // Validação específica para fotos de árvores
@@ -489,58 +460,24 @@ router.post('/postes', handleUpload({ maxFiles: 10 }), async (req, res) => {
                 });
             }
 
-            // Verifica IDs únicos no frontend
-            const uniqueIds = new Set(idsUnicos);
-            if (idsUnicos.length !== uniqueIds.size) {
-                cleanUploads(files);
-                return res.status(400).json({
-                    success: false,
-                    message: 'IDs duplicados encontrados para árvores',
-                    code: 'DUPLICATE_TREE_IDS'
-                });
-            }
         }
 
         // Criação do poste com transação
         const poste = await prisma.$transaction(async (prisma) => {
-            // Verificação de IDs existentes para árvores
-            if (treePhotos.length > 0) {
-                // Verifica duplicatas nos IDs recebidos
-                const uniqueIds = new Set(idsUnicos);
-                if (idsUnicos.length !== uniqueIds.size) {
-                    throw new Error('IDs duplicados encontrados no envio');
-                }
-
-                // Verifica IDs que já existem no banco
-                const existingTrees = await prisma.foto.findMany({
-                    where: {
-                        idUnicoArvore: {
-                            in: idsUnicos.filter(id => id)
-                        }
-                    },
-                    select: { idUnicoArvore: true }
-                });
-
-                if (existingTrees.length > 0) {
-                    throw new Error(`IDs de árvore já existentes: ${existingTrees.map(t => t.idUnicoArvore).join(', ')}`);
-                }
-            }
-
-            // Preparar dados das fotos com geração segura de IDs
-            const fotosData = await Promise.all(files.map(async (file, index) => {
+            // Preparar dados das fotos (sem IDs únicos)
+            const fotosData = files?.map((file, index) => {
                 const fotoData = {
                     url: `/uploads/${file.filename}`,
                     tipo: file.tipo,
-                    fotoLatitude: latitude,
+                    fotoLatitude: latitude, // Coordenadas padrão do poste
                     fotoLongitude: longitude
                 };
 
+                // Adiciona metadados específicos para árvores
                 if (file.tipo === TIPOS_FOTO.ARVORE) {
                     fotoData.especieArvore = especies[index];
 
-                    // Usa o ID fornecido ou gera um novo único
-                    fotoData.idUnicoArvore = idsUnicos[index] || await generateTreeId(prisma);
-
+                    // Sobrescreve coordenadas se específicas
                     if (coordsArvores[index]) {
                         const [lat, lng] = JSON.parse(coordsArvores[index]);
                         fotoData.fotoLatitude = lat;
@@ -549,7 +486,7 @@ router.post('/postes', handleUpload({ maxFiles: 10 }), async (req, res) => {
                 }
 
                 return fotoData;
-            }));
+            });
 
 
             return await prisma.postes.create({
