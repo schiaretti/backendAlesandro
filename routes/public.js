@@ -83,7 +83,7 @@ router.post('/login', async (req, res) => {
     }
 });
 
-router.get('/listar-postes', async (req, res) => {
+/*router.get('/listar-postes', async (req, res) => {
     console.log('Iniciando listagem de postes');
     try {
         const { page = 1, limit = 1000 } = req.query;
@@ -362,6 +362,63 @@ router.get('/listar-postes', async (req, res) => {
         });
     }
 });*/
+
+router.get('/listar-postes', async (req, res) => {
+    console.log('Iniciando listagem de postes');
+    try {
+        const { page = 1, limit = 1000 } = req.query;
+
+        // 1. Busca os postes com tratamento para campos não-nulos
+        const postes = await prisma.postes.findMany({
+            where: {
+                latitude: { not: null },
+                longitude: { not: null }
+            },
+            select: {
+                id: true,
+                numeroIdentificacao: true,
+                latitude: true,
+                longitude: true,
+                endereco: true,
+                cidade: true
+                // Removido createdAt pois não existe no seu modelo
+            },
+            // Removido orderBy: { createdAt: 'desc' } pois o campo não existe
+            skip: (page - 1) * limit,
+            take: Number(limit)
+        });
+
+        // 2. Formatação dos dados
+        const postesFormatados = postes.map(poste => ({
+            id: poste.id,
+            numeroIdentificacao: poste.numeroIdentificacao,
+            endereco: poste.endereco,
+            cidade: poste.cidade,
+            coords: [poste.latitude, poste.longitude]
+            // Removido createdAt
+        }));
+
+        res.json({
+            success: true,
+            data: postesFormatados,
+            count: postesFormatados.length
+        });
+
+    } catch (error) {
+        console.error('Erro detalhado ao listar postes:', {
+            message: error.message,
+            stack: error.stack,
+            prismaError: error.code,
+        });
+
+        res.status(500).json({
+            success: false,
+            message: 'Erro ao listar postes',
+            details: process.env.NODE_ENV === 'development' ? error.message : 'Erro interno',
+            code: error.code
+        });
+    }
+});
 
 router.post('/postes', handleUpload({ maxFiles: 10 }), async (req, res) => {
     try {
