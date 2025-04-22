@@ -5,6 +5,11 @@ import jwt from 'jsonwebtoken'
 import fs from 'fs';
 import { handleUpload, cleanUploads } from '../middlewares/fileUpload.js';
 
+// Função para gerar IDs únicos
+const generateUniqueId = () => {
+    return 'arv-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
+};
+
 const prisma = new PrismaClient()
 const router = express.Router()
 const JWT_SECRET = process.env.JWT_SECRET
@@ -489,7 +494,6 @@ router.post('/postes', handleUpload({ maxFiles: 10 }), async (req, res) => {
                     throw new Error(`IDs de árvore já existentes: ${idsExistentes.map(f => f.idUnicoArvore).join(', ')}`);
                 }
             }
-
             // Preparar dados das fotos
             const fotosData = files?.map((file, index) => {
                 const fotoData = {
@@ -502,7 +506,7 @@ router.post('/postes', handleUpload({ maxFiles: 10 }), async (req, res) => {
                 // Adiciona metadados específicos para árvores
                 if (file.tipo === TIPOS_FOTO.ARVORE) {
                     fotoData.especieArvore = especies[index];
-                    fotoData.idUnicoArvore = idsUnicos[index] || crypto.randomUUID();
+                    fotoData.idUnicoArvore = idsUnicos[index] || generateUniqueId();
 
                     // Sobrescreve coordenadas se específicas
                     if (coordsArvores[index]) {
