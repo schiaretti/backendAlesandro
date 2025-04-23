@@ -336,7 +336,7 @@ export const handleUpload = (options = {}) => {
 
 export { 
     handleUpload, 
-    cleanUploads,
+    cleanUploads, 
     storage,
     fileFilter 
 };
