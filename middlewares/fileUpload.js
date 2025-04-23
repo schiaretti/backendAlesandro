@@ -227,7 +227,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // Função para limpar uploads
-export const cleanUploads = (files) => {
+ const cleanUploads = (files) => {
     if (!files?.length) return;
 
     files.forEach(file => {
@@ -268,7 +268,7 @@ const fileFilter = (req, file, cb) => {
 };
 
 
-export const handleUpload = (options = {}) => {
+ const handleUpload = (options = {}) => {
     const uploader = multer({
         storage,
         fileFilter,
