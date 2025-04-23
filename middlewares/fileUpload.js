@@ -218,6 +218,55 @@ export const handleUpload = (options = {}) => {
         });
     };
 };*/
+import multer from 'multer';
+import path from 'path';
+import fs from 'fs';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Função para limpar uploads
+export const cleanUploads = (files) => {
+    if (!files?.length) return;
+
+    files.forEach(file => {
+        try {
+            if (fs.existsSync(file.path)) {
+                fs.unlinkSync(file.path);
+                console.log(`Arquivo removido: ${file.path}`);
+            }
+        } catch (err) {
+            console.error(`Erro ao limpar arquivo ${file.path}:`, err.message);
+        }
+    });
+};
+
+const storage = multer.diskStorage({
+    destination: (req, file, cb) => {
+        const uploadDir = path.join(__dirname, '../uploads');
+        fs.mkdirSync(uploadDir, { recursive: true });
+        cb(null, uploadDir);
+    },
+    filename: (req, file, cb) => {
+        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+        const ext = path.extname(file.originalname);
+        cb(null, `foto_${uniqueSuffix}${ext}`);
+    }
+});
+
+const fileFilter = (req, file, cb) => {
+    const allowedTypes = /jpeg|jpg|png/i;
+    const extname = allowedTypes.test(path.extname(file.originalname));
+    const mimetype = allowedTypes.test(file.mimetype);
+
+    if (extname && mimetype) {
+        cb(null, true);
+    } else {
+        cb(new Error('Apenas imagens (JPEG/JPG/PNG) são permitidas'), false);
+    }
+};
+
 
 export const handleUpload = (options = {}) => {
     const uploader = multer({
@@ -261,7 +310,7 @@ export const handleUpload = (options = {}) => {
                 if (req.files && req.body.tipos) {
                     req.files.forEach((file, index) => {
                         file.tipo = req.body.tipos?.[index] || 'OUTRO';
-                        
+
                         if (file.tipo === 'ARVORE') {
                             // Corrigido para usar 'especies' em vez de 'especieArvore'
                             file.especieArvore = req.body.especies?.[index]; // <<< Correção aqui
@@ -275,7 +324,7 @@ export const handleUpload = (options = {}) => {
                     filename: f.filename,
                     tipo: f.tipo,
                     especieArvore: f.especieArvore,
-                    coords: f.fotoLatitude && f.fotoLongitude ? 
+                    coords: f.fotoLatitude && f.fotoLongitude ?
                         [f.fotoLatitude, f.fotoLongitude] : null
                 })));
 
@@ -283,4 +332,11 @@ export const handleUpload = (options = {}) => {
             });
         });
     };
+};
+
+export { 
+    handleUpload, 
+    cleanUploads,
+    storage,
+    fileFilter 
 };
