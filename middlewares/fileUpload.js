@@ -205,10 +205,10 @@ export const handleUpload = (options = {}) => {
                         
                         // Adiciona metadados específicos para árvores
                         if (file.tipo === 'ARVORE') {
-                            file.especie = req.body.especies?.[index];
-                            file.latitude = req.body.latitudes?.[index];
-                            file.longitude = req.body.longitudes?.[index];
-                            file.idUnico = req.body.idsUnicos?.[index] || `arv-${Date.now()}-${index}`;
+                            file.especieArvore = req.body.especies?.[index];
+                            file.latitude = req.body.latitudes?.[index] || null;
+                            file.longitude = req.body.longitudes?.[index] || null;
+                           
                         }
                     });
                 }
