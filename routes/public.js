@@ -644,7 +644,7 @@ router.put('/postes/:id/localizacao', async (req, res) => {
         const { id } = req.params;
         const { latitude, longitude } = req.body;
 
-        // Validação dos campos obrigatórios (melhorada para string vazia)
+        // Validação dos campos obrigatórios
         if (latitude === undefined || longitude === undefined || latitude === '' || longitude === '') {
             return res.status(400).json({
                 success: false,
@@ -653,11 +653,11 @@ router.put('/postes/:id/localizacao', async (req, res) => {
             });
         }
 
-        // Validação dos valores numéricos (corrigido o parêntese)
+        // Validação dos valores numéricos
         const lat = parseFloat(latitude);
         const lng = parseFloat(longitude);
         
-        if (isNaN(lat) || isNaN(lng)) { // <<- Aqui estava o erro original
+        if (isNaN(lat) || isNaN(lng)) {
             return res.status(400).json({
                 success: false,
                 message: 'Latitude e longitude devem ser valores numéricos',
@@ -665,7 +665,7 @@ router.put('/postes/:id/localizacao', async (req, res) => {
             });
         }
 
-        // Validação dos intervalos (mantido igual - correto)
+        // Validação dos intervalos
         if (lat < -90 || lat > 90 || lng < -180 || lng > 180) {
             return res.status(400).json({
                 success: false,
@@ -674,13 +674,13 @@ router.put('/postes/:id/localizacao', async (req, res) => {
             });
         }
 
-        // Atualização no banco (adicionei coords para consistência)
+        // Atualização no banco de dados
         const posteAtualizado = await prisma.postes.update({
             where: { id },
             data: {
                 latitude: lat,
                 longitude: lng,
-                coords: [lat, lng] // <<- Novo campo para manter consistência
+                coords: [lat, lng] // Garante consistência com o frontend
             },
             select: {
                 id: true,
@@ -692,15 +692,15 @@ router.put('/postes/:id/localizacao', async (req, res) => {
             }
         });
 
-        return res.json({ // <<- Adicionei return para melhor prática
+        return res.json({
             success: true,
-            message: 'Localização do poste atualizada com sucesso',
+            message: 'Localização atualizada com sucesso',
             data: posteAtualizado
         });
 
     } catch (error) {
-        console.error('Erro ao atualizar localização do poste:', error);
-
+        console.error('Erro ao atualizar localização:', error);
+        
         if (error.code === 'P2025') {
             return res.status(404).json({
                 success: false,
@@ -709,7 +709,7 @@ router.put('/postes/:id/localizacao', async (req, res) => {
             });
         }
 
-        return res.status(500).json({ // <<- Adicionei return
+        return res.status(500).json({
             success: false,
             message: 'Erro interno no servidor',
             code: 'INTERNAL_SERVER_ERROR',
