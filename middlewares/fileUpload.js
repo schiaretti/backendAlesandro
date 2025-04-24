@@ -312,8 +312,8 @@ const fileFilter = (req, file, cb) => {
                         file.tipo = req.body.tipos?.[index] || 'OUTRO';
 
                         if (file.tipo === 'ARVORE') {
-                            // Corrigido para usar 'especies' em vez de 'especieArvore'
-                            file.especieArvore = req.body.especies?.[index]; // <<< Correção aqui
+                           
+                            file.especieArvore = req.body.especieArvore?.[index]; // 
                             file.fotoLatitude = parseFloat(req.body.latitudes?.[index]) || null;
                             file.fotoLongitude = parseFloat(req.body.longitudes?.[index]) || null;
                         }
