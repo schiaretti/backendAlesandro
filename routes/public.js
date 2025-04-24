@@ -638,6 +638,89 @@ router.post('/postes', handleUpload({ maxFiles: 10 }), async (req, res) => {
     }
 });
 
+// Rota para atualizar a localização de um poste
+router.put('/postes/:id/localizacao', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { latitude, longitude } = req.body;
+
+        // Validação dos campos obrigatórios (melhorada para string vazia)
+        if (latitude === undefined || longitude === undefined || latitude === '' || longitude === '') {
+            return res.status(400).json({
+                success: false,
+                message: 'Latitude e longitude são obrigatórias',
+                code: 'MISSING_COORDINATES'
+            });
+        }
+
+        // Validação dos valores numéricos (corrigido o parêntese)
+        const lat = parseFloat(latitude);
+        const lng = parseFloat(longitude);
+        
+        if (isNaN(lat) || isNaN(lng)) { // <<- Aqui estava o erro original
+            return res.status(400).json({
+                success: false,
+                message: 'Latitude e longitude devem ser valores numéricos',
+                code: 'INVALID_COORDINATES_FORMAT'
+            });
+        }
+
+        // Validação dos intervalos (mantido igual - correto)
+        if (lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+            return res.status(400).json({
+                success: false,
+                message: 'Valores de coordenadas inválidos',
+                code: 'INVALID_COORDINATES_RANGE'
+            });
+        }
+
+        // Atualização no banco (adicionei coords para consistência)
+        const posteAtualizado = await prisma.postes.update({
+            where: { id },
+            data: {
+                latitude: lat,
+                longitude: lng,
+                coords: [lat, lng] // <<- Novo campo para manter consistência
+            },
+            select: {
+                id: true,
+                numeroIdentificacao: true,
+                latitude: true,
+                longitude: true,
+                endereco: true,
+                cidade: true
+            }
+        });
+
+        return res.json({ // <<- Adicionei return para melhor prática
+            success: true,
+            message: 'Localização do poste atualizada com sucesso',
+            data: posteAtualizado
+        });
+
+    } catch (error) {
+        console.error('Erro ao atualizar localização do poste:', error);
+
+        if (error.code === 'P2025') {
+            return res.status(404).json({
+                success: false,
+                message: 'Poste não encontrado',
+                code: 'POST_NOT_FOUND'
+            });
+        }
+
+        return res.status(500).json({ // <<- Adicionei return
+            success: false,
+            message: 'Erro interno no servidor',
+            code: 'INTERNAL_SERVER_ERROR',
+            details: process.env.NODE_ENV === 'development' ? {
+                error: error.message,
+                stack: error.stack
+            } : undefined
+        });
+    }
+});
+
 
 
 export default router
