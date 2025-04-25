@@ -703,7 +703,7 @@ router.put('/postes/:id/localizacao', async (req, res) => {
             data: {
                 latitude: lat,
                 longitude: lng,
-                coords: [lat, lng]
+               
             },
             select: {
                 id: true,
