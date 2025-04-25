@@ -638,14 +638,16 @@ router.post('/postes', handleUpload({ maxFiles: 10 }), async (req, res) => {
     }
 });
 
-// Rota para atualizar a localização de um poste
 router.put('/postes/:id/localizacao', async (req, res) => {
+    console.log('Iniciando atualização de localização:', req.params.id, req.body);
+    
     try {
         const { id } = req.params;
         const { latitude, longitude } = req.body;
 
-        // Validação dos campos obrigatórios
-        if (latitude === undefined || longitude === undefined || latitude === '' || longitude === '') {
+        // Validação mais robusta
+        if (latitude === undefined || longitude === undefined) {
+            console.log('Campos faltando:', { latitude, longitude });
             return res.status(400).json({
                 success: false,
                 message: 'Latitude e longitude são obrigatórias',
@@ -653,34 +655,55 @@ router.put('/postes/:id/localizacao', async (req, res) => {
             });
         }
 
-        // Validação dos valores numéricos
-        const lat = parseFloat(latitude);
-        const lng = parseFloat(longitude);
+        // Converter para números
+        const lat = Number(latitude);
+        const lng = Number(longitude);
         
-        if (isNaN(lat) || isNaN(lng)) {
+        console.log('Coordenadas convertidas:', { lat, lng });
+
+        // Validação numérica mais segura
+        if (typeof lat !== 'number' || typeof lng !== 'number' || isNaN(lat) || isNaN(lng)) {
+            console.log('Coordenadas inválidas:', { lat, lng });
             return res.status(400).json({
                 success: false,
-                message: 'Latitude e longitude devem ser valores numéricos',
+                message: 'Latitude e longitude devem ser valores numéricos válidos',
                 code: 'INVALID_COORDINATES_FORMAT'
             });
         }
 
-        // Validação dos intervalos
+        // Validação de faixa
         if (lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+            console.log('Coordenadas fora da faixa:', { lat, lng });
             return res.status(400).json({
                 success: false,
-                message: 'Valores de coordenadas inválidos',
+                message: 'Valores de coordenadas inválidos (latitude deve estar entre -90 e 90, longitude entre -180 e 180)',
                 code: 'INVALID_COORDINATES_RANGE'
             });
         }
 
+        // Verificar se o poste existe antes de atualizar
+        const posteExistente = await prisma.postes.findUnique({
+            where: { id }
+        });
+
+        if (!posteExistente) {
+            console.log('Poste não encontrado:', id);
+            return res.status(404).json({
+                success: false,
+                message: 'Poste não encontrado',
+                code: 'POST_NOT_FOUND'
+            });
+        }
+
+        console.log('Atualizando poste:', id, 'com coordenadas:', lat, lng);
+        
         // Atualização no banco de dados
         const posteAtualizado = await prisma.postes.update({
             where: { id },
             data: {
                 latitude: lat,
                 longitude: lng,
-                coords: [lat, lng] // Garante consistência com o frontend
+                coords: [lat, lng]
             },
             select: {
                 id: true,
@@ -692,6 +715,8 @@ router.put('/postes/:id/localizacao', async (req, res) => {
             }
         });
 
+        console.log('Poste atualizado com sucesso:', posteAtualizado);
+        
         return res.json({
             success: true,
             message: 'Localização atualizada com sucesso',
@@ -699,13 +724,28 @@ router.put('/postes/:id/localizacao', async (req, res) => {
         });
 
     } catch (error) {
-        console.error('Erro ao atualizar localização:', error);
+        console.error('Erro detalhado:', {
+            message: error.message,
+            stack: error.stack,
+            code: error.code,
+            meta: error.meta
+        });
         
+        // Tratamento específico para erros do Prisma
         if (error.code === 'P2025') {
             return res.status(404).json({
                 success: false,
                 message: 'Poste não encontrado',
                 code: 'POST_NOT_FOUND'
+            });
+        }
+
+        // Tratamento para erros de conexão com o banco
+        if (error.code === 'P1001') {
+            return res.status(503).json({
+                success: false,
+                message: 'Serviço de banco de dados indisponível',
+                code: 'DATABASE_UNAVAILABLE'
             });
         }
 
@@ -720,7 +760,6 @@ router.put('/postes/:id/localizacao', async (req, res) => {
         });
     }
 });
-
 
 
 export default router
