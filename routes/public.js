@@ -420,6 +420,38 @@ router.get('/listar-postes', async (req, res) => {
     }
 });
 
+router.get('/count-postes', async (req, res) => {
+    console.log('Contagem de postes solicitada');
+    try {
+        // Conta apenas postes com coordenadas válidas
+        const count = await prisma.postes.count({
+            where: {
+                latitude: { not: null },
+                longitude: { not: null }
+            }
+        });
+
+        res.json({
+            success: true,
+            count: count
+        });
+
+    } catch (error) {
+        console.error('Erro ao contar postes:', {
+            message: error.message,
+            stack: error.stack,
+            prismaError: error.code,
+        });
+
+        res.status(500).json({
+            success: false,
+            message: 'Erro ao contar postes',
+            details: process.env.NODE_ENV === 'development' ? error.message : 'Erro interno',
+            code: error.code
+        });
+    }
+});
+
 router.post('/postes', handleUpload({ maxFiles: 10 }), async (req, res) => {
     try {
         const { body, files } = req;
