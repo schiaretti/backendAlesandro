@@ -2,7 +2,6 @@ import express from 'express';
 import { fileURLToPath } from 'url'; // Adicione esta importação
 import path from 'path';
 import publicRoutes from './routes/public.js';
-import privateRoutes from './routes/private.js';
 import auth from './middlewares/auth.js';
 import cors from 'cors';
 import { PrismaClient } from '@prisma/client';
@@ -50,7 +49,7 @@ app.use((req, res, next) => {
 
 // Rotas
 app.use('/api', publicRoutes);
-app.use('/api/private', auth, privateRoutes);
+
 
 // Health Check
 app.get('/health', async (req, res) => {
