@@ -1,59 +1,41 @@
-import jwt from 'jsonwebtoken';
+import jwt from 'jsonwebtoken'; // Adicione esta linha no topo
 
-const JWT_SECRET = process.env.JWT_SECRET;
 
-/**
- * Middleware de autenticação JWT padrão
- * (Exportado como default para compatibilidade com seu código existente)
- */
 const auth = (req, res, next) => {
-    const authHeader = req.headers['authorization'];
-    console.log('Rota acessada:', req.path); // Adicione esta linha
-    const token = authHeader?.split(' ')[1]; // Remove 'Bearer '
+    // Verifica múltiplos locais onde o token pode estar
+    const token = req.headers['authorization']?.split(' ')[1] || 
+                 req.headers['x-auth-token'] || 
+                 req.cookies?.token;
+
+    console.log('Token recebido:', token); // Debug adicional
 
     if (!token) {
-        return res.status(401).json({ 
+        console.error('Token não encontrado em:', {
+            headers: req.headers,
+            cookies: req.cookies
+        });
+        return res.status(401).json({
             success: false,
-            message: 'Token de acesso não fornecido',
-            code: 'MISSING_TOKEN'
+            message: 'Autenticação necessária',
+            code: 'MISSING_AUTH'
         });
     }
 
-    jwt.verify(token, JWT_SECRET, (err, decoded) => {
-        if (err) {
-            return res.status(403).json({
-                success: false,
-                message: 'Token inválido ou expirado',
-                code: 'INVALID_TOKEN',
-                details: process.env.NODE_ENV === 'development' ? err.message : undefined
-            });
-        }
-
-        // Mantendo os nomes de campos que você já usa
-        req.usuarioId = decoded.id;
-        req.usuarioNivel = decoded.nivel;
-
+    try {
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        req.usuario = {
+            id: decoded.id,
+            nivel: decoded.nivel
+        };
+        console.log('Usuário autenticado:', req.usuario); // Debug
         next();
-    });
+    } catch (error) {
+        console.error('Token inválido:', error.message);
+        return res.status(403).json({
+            success: false,
+            message: 'Token inválido ou expirado',
+            code: 'INVALID_TOKEN'
+        });
+    }
 };
-
-/**
- * Middleware de autorização por nível (opcional)
- * (Exportado como named export para uso avançado)
- */
-export const authorizeByLevel = (niveisPermitidos) => {
-    return (req, res, next) => {
-        if (!niveisPermitidos.includes(req.usuarioNivel)) {
-            return res.status(403).json({
-                success: false,
-                message: 'Acesso não autorizado para seu nível de usuário',
-                code: 'UNAUTHORIZED_ACCESS'
-            });
-        }
-        next();
-    };
-};
-
-
-// Exportação padrão (main middleware)
-export default auth;
+export default auth
