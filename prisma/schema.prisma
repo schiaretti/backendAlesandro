@@ -65,6 +65,7 @@ model Postes {
   quantidadeFaixas   Int?     // Melhor como inteiro
   tipoPasseio        String?
   canteiroCentral    Boolean? // Melhor como booleano
+  larguraCanteiro   Int?
   finalidadeInstalacao String?
   especieArvore      String?
   distanciaEntrePostes  Int?
