@@ -589,7 +589,7 @@ router.post('/postes', handleUpload({ maxFiles: 10 }), async (req, res) => {
                     cep: body.cep,
                     isLastPost: body.isLastPost === 'true',
                     canteiroCentral: body.canteiroCentral === 'true',
-                    larguraCanteiro: body.larguraCanteiro,
+                    larguraCanteiro: body.larguraCanteiro  ? parseInt(body.larguraCanteiro) : null,
                     usuarioId: body.usuarioId,
                     emFrente: body.emFrente,
                     localizacao: body.localizacao,
