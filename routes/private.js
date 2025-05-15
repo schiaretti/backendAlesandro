@@ -17,7 +17,7 @@ router.post('/cadastro-usuarios', auth, verificarAdmin, async (req, res) => {
         const { email, nome, senha, nivel } = req.body;
 
         if (!email || !nome || !senha || !nivel) {
-            return res.status(400).json({ 
+            return res.status(400).json({
                 success: false,
                 message: 'Todos os campos são obrigatórios'
             });
@@ -38,7 +38,7 @@ router.post('/cadastro-usuarios', auth, verificarAdmin, async (req, res) => {
             data: { email, nome, senha: hashSenha, nivel }
         });
 
-        res.status(201).json({  
+        res.status(201).json({
             success: true,
             data: {
                 id: usuarioDb.id,
@@ -61,7 +61,7 @@ router.post('/cadastro-usuarios', auth, verificarAdmin, async (req, res) => {
 router.get('/listar-usuarios', auth, verificarAdmin, async (req, res) => {
     try {
 
-         // Se houver o parâmetro ?count=true, retorna apenas a contagem
+        // Se houver o parâmetro ?count=true, retorna apenas a contagem
         if (req.query.count === 'true') {
             const totalUsuarios = await prisma.usuarios.count();
             return res.json({
@@ -69,14 +69,14 @@ router.get('/listar-usuarios', auth, verificarAdmin, async (req, res) => {
                 count: totalUsuarios
             });
         }
-        
+
         const usuarios = await prisma.usuarios.findMany({
             select: {
                 id: true,
                 email: true,
                 nome: true,
                 nivel: true
-                
+
             }
         });
 
@@ -117,7 +117,7 @@ router.put('/editar-usuario/:id', auth, verificarAdmin, async (req, res) => {
 
         // Validações
         const dadosAtualizacao = {};
-        
+
         if (email) {
             const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
             if (!emailRegex.test(email)) {
@@ -139,7 +139,7 @@ router.put('/editar-usuario/:id', auth, verificarAdmin, async (req, res) => {
         }
 
         if (nome) dadosAtualizacao.nome = nome;
-        
+
         if (nivel) {
             if (!['admin', 'usuario', 'cadastrador'].includes(nivel)) {
                 return res.status(400).json({
@@ -163,7 +163,7 @@ router.put('/editar-usuario/:id', auth, verificarAdmin, async (req, res) => {
                 email: true,
                 nome: true,
                 nivel: true
-                
+
             }
         });
 
@@ -221,7 +221,7 @@ router.delete('/deletar-usuario/:id', auth, verificarAdmin, async (req, res) => 
 
     } catch (error) {
         console.error('Erro ao deletar usuário:', error);
-        
+
         // Tratamento especial para erro de chave estrangeira
         if (error.code === 'P2003') {
             return res.status(400).json({
@@ -236,6 +236,196 @@ router.delete('/deletar-usuario/:id', auth, verificarAdmin, async (req, res) => 
             message: 'Erro ao deletar usuário',
             code: 'USER_DELETION_ERROR'
         });
+    }
+});
+
+// routes.js
+router.get('/relatorios/postes', async (req, res) => {
+    try {
+        const {
+            tipoRelatorio = 'estatisticas',
+            // Filtros básicos
+            endereco, cidade, numero, cep,
+            // Componentes elétricos
+            transformador, concentrador, telecom, medicao,
+            // Iluminação
+            tipoLampada, potenciaMin, potenciaMax, tipoReator, tipoComando,
+            // Características físicas
+            alturaposteMin, alturaposteMax, estruturaposte, tipoBraco,
+            tamanhoBracoMin, tamanhoBracoMax, quantidadePontosMin, quantidadePontosMax,
+            // Rede elétrica
+            tipoRede, tipoCabo, numeroFases,
+            // Infraestrutura
+            tipoVia, hierarquiaVia, tipoPavimento, quantidadeFaixasMin, quantidadeFaixasMax,
+            tipoPasseio, canteiroCentral, larguraCanteiroMin, larguraCanteiroMax,
+            // Outros
+            finalidadeInstalacao, especieArvore, distanciaEntrePostesMin, distanciaEntrePostesMax,
+            // Datas
+            dataCadastroInicio, dataCadastroFim
+        } = req.query;
+
+        // Construção dinâmica do 'where'
+        const where = {};
+
+        // 1. Filtros básicos
+        if (cidade) where.cidade = cidade;
+        if (endereco) where.endereco = { contains: endereco, mode: 'insensitive' };
+        if (numero) where.numero = numero;
+        if (cep) where.cep = cep;
+
+        // 2. Componentes elétricos
+        if (transformador) where.transformador = transformador === 'true';
+        if (concentrador) where.concentrador = concentrador === 'true';
+        if (telecom) where.telecom = telecom === 'true';
+        if (medicao) where.medicao = medicao === 'true';
+
+        // 3. Iluminação
+        if (tipoLampada) where.tipoLampada = tipoLampada;
+        if (tipoReator) where.tipoReator = tipoReator;
+        if (tipoComando) where.tipoComando = tipoComando;
+        if (potenciaMin || potenciaMax) {
+            where.potenciaLampada = {
+                gte: potenciaMin ? +potenciaMin : undefined,
+                lte: potenciaMax ? +potenciaMax : undefined
+            };
+        }
+
+        // 4. Características físicas
+        if (estruturaposte) where.estruturaposte = estruturaposte;
+        if (tipoBraco) where.tipoBraco = tipoBraco;
+        if (alturaposteMin || alturaposteMax) {
+            where.alturaposte = {
+                gte: alturaposteMin ? +alturaposteMin : undefined,
+                lte: alturaposteMax ? +alturaposteMax : undefined
+            };
+        }
+        if (tamanhoBracoMin || tamanhoBracoMax) {
+            where.tamanhoBraco = {
+                gte: tamanhoBracoMin ? +tamanhoBracoMin : undefined,
+                lte: tamanhoBracoMax ? +tamanhoBracoMax : undefined
+            };
+        }
+        if (quantidadePontosMin || quantidadePontosMax) {
+            where.quantidadePontos = {
+                gte: quantidadePontosMin ? +quantidadePontosMin : undefined,
+                lte: quantidadePontosMax ? +quantidadePontosMax : undefined
+            };
+        }
+
+        // 5. Rede elétrica
+        if (tipoRede) where.tipoRede = tipoRede;
+        if (tipoCabo) where.tipoCabo = tipoCabo;
+        if (numeroFases) where.numeroFases = numeroFases;
+
+        // 6. Infraestrutura
+        if (tipoVia) where.tipoVia = tipoVia;
+        if (hierarquiaVia) where.hierarquiaVia = hierarquiaVia;
+        if (tipoPavimento) where.tipoPavimento = tipoPavimento;
+        if (tipoPasseio) where.tipoPasseio = tipoPasseio;
+        if (canteiroCentral) where.canteiroCentral = canteiroCentral === 'true';
+        if (quantidadeFaixasMin || quantidadeFaixasMax) {
+            where.quantidadeFaixas = {
+                gte: quantidadeFaixasMin ? +quantidadeFaixasMin : undefined,
+                lte: quantidadeFaixasMax ? +quantidadeFaixasMax : undefined
+            };
+        }
+        if (larguraCanteiroMin || larguraCanteiroMax) {
+            where.larguraCanteiro = {
+                gte: larguraCanteiroMin ? +larguraCanteiroMin : undefined,
+                lte: larguraCanteiroMax ? +larguraCanteiroMax : undefined
+            };
+        }
+
+        // 7. Outros
+        if (finalidadeInstalacao) where.finalidadeInstalacao = finalidadeInstalacao;
+        if (especieArvore) where.especieArvore = especieArvore;
+        if (distanciaEntrePostesMin || distanciaEntrePostesMax) {
+            where.distanciaEntrePostes = {
+                gte: distanciaEntrePostesMin ? +distanciaEntrePostesMin : undefined,
+                lte: distanciaEntrePostesMax ? +distanciaEntrePostesMax : undefined
+            };
+        }
+
+        // 8. Filtros por data
+        if (dataCadastroInicio || dataCadastroFim) {
+            where.dataCadastro = {
+                gte: dataCadastroInicio ? new Date(dataCadastroInicio) : undefined,
+                lte: dataCadastroFim ? new Date(dataCadastroFim) : undefined
+            };
+        }
+
+        // Relatório detalhado
+        const postes = await prisma.postes.findMany({
+            where,
+            select: {
+                // Identificação
+                numeroIdentificacao: true,
+                cidade: true,
+                endereco: true,
+                numero: true,
+                cep: true,
+                localizacao: true,
+
+                // Características Físicas
+                alturaposte: true,
+                estruturaposte: true,
+                tipoBraco: true,
+                tamanhoBraco: true,
+                quantidadePontos: true,
+
+                // Componentes
+                transformador: true,
+                concentrador: true,
+                telecom: true,
+                medicao: true,
+
+                // Iluminação
+                tipoLampada: true,
+                potenciaLampada: true,
+                tipoReator: true,
+                tipoComando: true,
+
+                // Rede Elétrica
+                tipoRede: true,
+                tipoCabo: true,
+                numeroFases: true,
+
+                // Infraestrutura
+                tipoVia: true,
+                hierarquiaVia: true,
+                tipoPavimento: true,
+                quantidadeFaixas: true,
+                tipoPasseio: true,
+
+                // Outros
+                finalidadeInstalacao: true,
+                especieArvore: true,
+                canteiroCentral: true,
+                larguraCanteiro: true,
+                distanciaEntrePostes: true,
+
+                // Datas (se existirem)
+                dataCadastro: true,
+                dataAtualizacao: true
+            },
+            orderBy: { numeroIdentificacao: 'asc' }
+        });
+
+        res.json({
+            success: true,
+            data: postes,
+            meta: {
+                total: postes.length,
+                ...(tipoRelatorio === 'por-rua' && {
+                    comTransformador: postes.filter(p => p.transformador).length,
+                    comConcentrador: postes.filter(p => p.concentrador).length
+                })
+            }
+        });
+
+    } catch (error) {
+        console.error('Erro no relatório:', error);
+        res.status(500).json({ success: false, error: "Erro ao gerar relatório" });
     }
 });
 
