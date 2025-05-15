@@ -60,6 +60,16 @@ router.post('/cadastro-usuarios', auth, verificarAdmin, async (req, res) => {
 // Rota de LISTAGEM (protegida para admin)
 router.get('/listar-usuarios', auth, verificarAdmin, async (req, res) => {
     try {
+
+         // Se houver o parâmetro ?count=true, retorna apenas a contagem
+        if (req.query.count === 'true') {
+            const totalUsuarios = await prisma.usuarios.count();
+            return res.json({
+                success: true,
+                count: totalUsuarios
+            });
+        }
+        
         const usuarios = await prisma.usuarios.findMany({
             select: {
                 id: true,
