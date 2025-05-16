@@ -381,7 +381,7 @@ router.get('/relatorios/postes', async (req, res) => {
         }
 
         // 8. Filtros por data
-        if (dataCadastroInicio || dataCadastroFim) {
+        if (dataInicio || dataFim) {
             where. createdAt = {
                 gte: dataInicio ? new Date(dataInicio) : undefined,
                 lte: dataFim ? new Date(dataFim) : undefined
@@ -424,8 +424,8 @@ router.get('/relatorios/postes', async (req, res) => {
                 canteiroCentral: true,
                 larguraCanteiro: true,
                 distanciaEntrePostes: true,
-                dataCadastro: true,
-                dataAtualizacao: true
+                createdAt: true,
+                updatedAt: true
             },
             orderBy: { numeroIdentificacao: 'asc' }
         });
