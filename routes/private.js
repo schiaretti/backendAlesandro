@@ -258,9 +258,7 @@ router.get('/relatorios/postes', async (req, res) => {
             tipoVia, hierarquiaVia, tipoPavimento, quantidadeFaixasMin, quantidadeFaixasMax,
             tipoPasseio, canteiroCentral, larguraCanteiroMin, larguraCanteiroMax,
             // Outros
-            finalidadeInstalacao, especieArvore, distanciaEntrePostesMin, distanciaEntrePostesMax,
-            // Datas
-            dataInicio, dataFim
+            finalidadeInstalacao, especieArvore, distanciaEntrePostesMin, distanciaEntrePostesMax
         } = req.query;
 
         // Construção dinâmica do 'where' com mapeamento dos valores do frontend
@@ -273,23 +271,13 @@ router.get('/relatorios/postes', async (req, res) => {
         if (cep) where.cep = cep;
 
         // 2. Componentes elétricos - mapeando "Sim"/"Não" para boolean
-        if (transformador) where.transformador = transformador === "Sim";
-        if (concentrador) where.concentrador = concentrador === "Sim";
-        if (telecom) where.telecom = telecom === "Sim";
-        if (medicao) where.medicao = medicao === "Sim";
+        if (transformador) where.transformador = transformador === "true";
+        if (concentrador) where.concentrador = concentrador === "true";
+        if (telecom) where.telecom = telecom === "true";
+        if (medicao) where.medicao = medicao === "true";
 
         // 3. Iluminação
-        if (tipoLampada) {
-            // Mapeia os valores do frontend para o padrão do banco
-            const mapLampada = {
-                "Vapor de Sodio VS": "Vapor de Sódio",
-                "Vapor de Mercúrio VM": "Vapor de Mercúrio",
-                "Mista": "Mista",
-                "Led": "LED",
-                "Desconhecida": "Desconhecido"
-            };
-            where.tipoLampada = mapLampada[tipoLampada] || tipoLampada;
-        }
+        if (tipoLampada) where.tipoLampada = tipoLampada;
         
         if (tipoReator) where.tipoReator = tipoReator;
         if (tipoComando) where.tipoComando = tipoComando;
@@ -302,22 +290,7 @@ router.get('/relatorios/postes', async (req, res) => {
 
         // 4. Características físicas
         if (estruturaposte) where.estruturaposte = estruturaposte;
-        
-        if (tipoBraco) {
-            // Mapeia os valores do frontend para o padrão do banco
-            const mapBraco = {
-                "Braço Curto": "Curto",
-                "Braço Médio": "Médio",
-                "Braço Longo": "Longo",
-                "Level 1": "Level1",
-                "Level 2": "Level2",
-                "Suporte com 1": "Suporte1",
-                "Suporte com 2": "Suporte2",
-                "Suporte com 3": "Suporte3",
-                "Suporte com 4": "Suporte4"
-            };
-            where.tipoBraco = mapBraco[tipoBraco] || tipoBraco;
-        }
+        if (tipoBraco) where.tipoBraco = tipoBraco;
         
         if (alturaposteMin || alturaposteMax) {
             where.alturaposte = {
@@ -341,22 +314,14 @@ router.get('/relatorios/postes', async (req, res) => {
         // 5. Rede elétrica
         if (tipoRede) where.tipoRede = tipoRede;
         if (tipoCabo) where.tipoCabo = tipoCabo;
-        if (numeroFases) {
-            // Mapeia os valores do frontend para o padrão do banco
-            const mapFases = {
-                "Monofásico": "1",
-                "Bifásico": "2",
-                "Trifásico": "3"
-            };
-            where.numeroFases = mapFases[numeroFases] || numeroFases;
-        }
+        if (numeroFases) where.numeroFases = numeroFases;
 
         // 6. Infraestrutura
         if (tipoVia) where.tipoVia = tipoVia;
         if (hierarquiaVia) where.hierarquiaVia = hierarquiaVia;
         if (tipoPavimento) where.tipoPavimento = tipoPavimento;
         if (tipoPasseio) where.tipoPasseio = tipoPasseio;
-        if (canteiroCentral) where.canteiroCentral = canteiroCentral === "Sim";
+        if (canteiroCentral) where.canteiroCentral = canteiroCentral === "true";
         if (quantidadeFaixasMin || quantidadeFaixasMax) {
             where.quantidadeFaixas = {
                 gte: quantidadeFaixasMin ? +quantidadeFaixasMin : undefined,
@@ -377,14 +342,6 @@ router.get('/relatorios/postes', async (req, res) => {
             where.distanciaEntrePostes = {
                 gte: distanciaEntrePostesMin ? +distanciaEntrePostesMin : undefined,
                 lte: distanciaEntrePostesMax ? +distanciaEntrePostesMax : undefined
-            };
-        }
-
-        // 8. Filtros por data
-        if (dataInicio || dataFim) {
-            where. createdAt = {
-                gte: dataInicio ? new Date(dataInicio) : undefined,
-                lte: dataFim ? new Date(dataFim) : undefined
             };
         }
 
@@ -424,8 +381,8 @@ router.get('/relatorios/postes', async (req, res) => {
                 canteiroCentral: true,
                 larguraCanteiro: true,
                 distanciaEntrePostes: true,
-                createdAt: true,
-                updatedAt: true
+                latitude: true,
+                longitude: true
             },
             orderBy: { numeroIdentificacao: 'asc' }
         });
@@ -467,7 +424,6 @@ router.get('/relatorios/postes', async (req, res) => {
                 potenciaMedia: calcularMedia('potenciaLampada'),
                 tiposReator: contarPorValor('tipoReator'),
                 tiposComando: contarPorValor('tipoComando'),
-                vaporSodio70: postes.filter(p => p.tipoLampada === 'Vapor de Sódio' && p.potenciaLampada == 70).length,
                 led: postes.filter(p => p.tipoLampada === 'LED').length
             },
             redeEletrica: {
@@ -488,9 +444,8 @@ router.get('/relatorios/postes', async (req, res) => {
                 finalidades: contarPorValor('finalidadeInstalacao'),
                 especiesArvore: contarPorValor('especieArvore'),
                 distanciaMedia: calcularMedia('distanciaEntrePostes'),
-                numerosIdentificacao: {
-                    total: postes.filter(p => p.numeroIdentificacao).length,
-                    unicos: new Set(postes.map(p => p.numeroIdentificacao)).size
+                coordenadas: {
+                    comLatLong: postes.filter(p => p.latitude && p.longitude).length
                 }
             }
         };
