@@ -260,7 +260,7 @@ router.get('/relatorios/postes', async (req, res) => {
             // Outros
             finalidadeInstalacao, especieArvore, distanciaEntrePostesMin, distanciaEntrePostesMax,
             // Datas
-            dataCadastroInicio, dataCadastroFim
+            dataInicio, dataFim
         } = req.query;
 
         // Construção dinâmica do 'where' com mapeamento dos valores do frontend
@@ -382,9 +382,9 @@ router.get('/relatorios/postes', async (req, res) => {
 
         // 8. Filtros por data
         if (dataCadastroInicio || dataCadastroFim) {
-            where.dataCadastro = {
-                gte: dataCadastroInicio ? new Date(dataCadastroInicio) : undefined,
-                lte: dataCadastroFim ? new Date(dataCadastroFim) : undefined
+            where. createdAt = {
+                gte: dataInicio ? new Date(dataInicio) : undefined,
+                lte: dataFim ? new Date(dataFim) : undefined
             };
         }
 
