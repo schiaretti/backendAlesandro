@@ -260,13 +260,13 @@ router.get('/relatorios/postes', async (req, res) => {
             // Outros
             finalidadeInstalacao, especieArvore, distanciaEntrePostesMin, distanciaEntrePostesMax,
             // Paginação
-            page = 1, 
+            page = 1,
             per_page = 20
         } = req.query;
 
         // Construção dinâmica do 'where'
         const where = {};
-        
+
         // 1. Filtros básicos
         if (cidade) where.cidade = cidade;
         if (endereco) where.endereco = { contains: endereco, mode: 'insensitive' };
@@ -274,10 +274,10 @@ router.get('/relatorios/postes', async (req, res) => {
         if (cep) where.cep = cep;
 
         // 2. Componentes elétricos
-        if (transformador) where.transformador = transformador === "true";
-        if (concentrador) where.concentrador = concentrador === "true";
-        if (telecom) where.telecom = telecom === "true";
-        if (medicao) where.medicao = medicao === "true";
+        if (transformador) where.transformador = transformador === "true" ? "true" : "false";
+        if (medicao) where.medicao = medicao === "true" ? "true" : "false";
+        if (telecom) where.telecom = telecom === "true" ? "true" : "false";
+        if (concentrador) where.concentrador = concentrador === "true" ? "true" : "false";
 
         // 3. Iluminação
         if (tipoLampada) where.tipoLampada = tipoLampada;
@@ -406,7 +406,7 @@ router.get('/relatorios/postes', async (req, res) => {
         // Funções auxiliares para estatísticas
         const calcularMedia = (campo) => {
             const valores = postes.filter(p => p[campo] !== null && p[campo] !== undefined)
-                                .map(p => parseFloat(p[campo]));
+                .map(p => parseFloat(p[campo]));
             return valores.length > 0 ? (valores.reduce((a, b) => a + b, 0) / valores.length).toFixed(2) : 0;
         };
 
@@ -423,10 +423,10 @@ router.get('/relatorios/postes', async (req, res) => {
         const estatisticas = {
             total: totalCount,
             componentes: {
-                transformador: await prisma.postes.count({ where: { ...where, transformador: true } }),
-                concentrador: await prisma.postes.count({ where: { ...where, concentrador: true } }),
-                telecom: await prisma.postes.count({ where: { ...where, telecom: true } }),
-                medicao: await prisma.postes.count({ where: { ...where, medicao: true } }),
+                transformador: await prisma.postes.count({ where: { ...where, transformador: "true" } }),
+                concentrador: await prisma.postes.count({ where: { ...where, concentrador: "true" } }),
+                telecom: await prisma.postes.count({ where: { ...where, telecom: "true" } }),
+                medicao: await prisma.postes.count({ where: { ...where, medicao: "true" } }),
                 tiposPoste: contarPorValor('estruturaposte')
             },
             estrutura: {
@@ -482,8 +482,8 @@ router.get('/relatorios/postes', async (req, res) => {
 
     } catch (error) {
         console.error('Erro no relatório:', error);
-        res.status(500).json({ 
-            success: false, 
+        res.status(500).json({
+            success: false,
             error: "Erro ao gerar relatório",
             details: process.env.NODE_ENV === 'development' ? error.message : undefined
         });
