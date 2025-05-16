@@ -258,19 +258,22 @@ router.get('/relatorios/postes', async (req, res) => {
             tipoVia, hierarquiaVia, tipoPavimento, quantidadeFaixasMin, quantidadeFaixasMax,
             tipoPasseio, canteiroCentral, larguraCanteiroMin, larguraCanteiroMax,
             // Outros
-            finalidadeInstalacao, especieArvore, distanciaEntrePostesMin, distanciaEntrePostesMax
+            finalidadeInstalacao, especieArvore, distanciaEntrePostesMin, distanciaEntrePostesMax,
+            // Paginação
+            page = 1, 
+            per_page = 20
         } = req.query;
 
-        // Construção dinâmica do 'where' com mapeamento dos valores do frontend
+        // Construção dinâmica do 'where'
         const where = {};
-
+        
         // 1. Filtros básicos
         if (cidade) where.cidade = cidade;
         if (endereco) where.endereco = { contains: endereco, mode: 'insensitive' };
         if (numero) where.numero = numero;
         if (cep) where.cep = cep;
 
-        // 2. Componentes elétricos - mapeando "Sim"/"Não" para boolean
+        // 2. Componentes elétricos
         if (transformador) where.transformador = transformador === "true";
         if (concentrador) where.concentrador = concentrador === "true";
         if (telecom) where.telecom = telecom === "true";
@@ -278,7 +281,6 @@ router.get('/relatorios/postes', async (req, res) => {
 
         // 3. Iluminação
         if (tipoLampada) where.tipoLampada = tipoLampada;
-        
         if (tipoReator) where.tipoReator = tipoReator;
         if (tipoComando) where.tipoComando = tipoComando;
         if (potenciaMin || potenciaMax) {
@@ -291,7 +293,6 @@ router.get('/relatorios/postes', async (req, res) => {
         // 4. Características físicas
         if (estruturaposte) where.estruturaposte = estruturaposte;
         if (tipoBraco) where.tipoBraco = tipoBraco;
-        
         if (alturaposteMin || alturaposteMax) {
             where.alturaposte = {
                 gte: alturaposteMin ? +alturaposteMin : undefined,
@@ -345,47 +346,62 @@ router.get('/relatorios/postes', async (req, res) => {
             };
         }
 
-        // Busca os postes com os filtros aplicados
-        const postes = await prisma.postes.findMany({
+        // Campos a serem selecionados
+        const selectFields = {
+            numeroIdentificacao: true,
+            cidade: true,
+            endereco: true,
+            numero: true,
+            cep: true,
+            localizacao: true,
+            alturaposte: true,
+            estruturaposte: true,
+            tipoBraco: true,
+            tamanhoBraco: true,
+            quantidadePontos: true,
+            transformador: true,
+            concentrador: true,
+            telecom: true,
+            medicao: true,
+            tipoLampada: true,
+            potenciaLampada: true,
+            tipoReator: true,
+            tipoComando: true,
+            tipoRede: true,
+            tipoCabo: true,
+            numeroFases: true,
+            tipoVia: true,
+            hierarquiaVia: true,
+            tipoPavimento: true,
+            quantidadeFaixas: true,
+            tipoPasseio: true,
+            finalidadeInstalacao: true,
+            especieArvore: true,
+            canteiroCentral: true,
+            larguraCanteiro: true,
+            distanciaEntrePostes: true,
+            latitude: true,
+            longitude: true
+        };
+
+        // Configuração da consulta
+        const queryOptions = {
             where,
-            select: {
-                numeroIdentificacao: true,
-                cidade: true,
-                endereco: true,
-                numero: true,
-                cep: true,
-                localizacao: true,
-                alturaposte: true,
-                estruturaposte: true,
-                tipoBraco: true,
-                tamanhoBraco: true,
-                quantidadePontos: true,
-                transformador: true,
-                concentrador: true,
-                telecom: true,
-                medicao: true,
-                tipoLampada: true,
-                potenciaLampada: true,
-                tipoReator: true,
-                tipoComando: true,
-                tipoRede: true,
-                tipoCabo: true,
-                numeroFases: true,
-                tipoVia: true,
-                hierarquiaVia: true,
-                tipoPavimento: true,
-                quantidadeFaixas: true,
-                tipoPasseio: true,
-                finalidadeInstalacao: true,
-                especieArvore: true,
-                canteiroCentral: true,
-                larguraCanteiro: true,
-                distanciaEntrePostes: true,
-                latitude: true,
-                longitude: true
-            },
+            select: selectFields,
             orderBy: { numeroIdentificacao: 'asc' }
-        });
+        };
+
+        // Adiciona paginação apenas para relatórios detalhados
+        if (tipoRelatorio === 'detalhado' || tipoRelatorio === 'por-rua') {
+            queryOptions.skip = (page - 1) * per_page;
+            queryOptions.take = +per_page;
+        }
+
+        // Executa a consulta
+        const [postes, totalCount] = await Promise.all([
+            prisma.postes.findMany(queryOptions),
+            prisma.postes.count({ where })
+        ]);
 
         // Funções auxiliares para estatísticas
         const calcularMedia = (campo) => {
@@ -403,14 +419,14 @@ router.get('/relatorios/postes', async (req, res) => {
             return Object.entries(contagem).map(([valor, count]) => ({ valor, count }));
         };
 
-        // Gerar estatísticas compatíveis com o frontend
+        // Gerar estatísticas
         const estatisticas = {
-            total: postes.length,
+            total: totalCount,
             componentes: {
-                transformador: postes.filter(p => p.transformador).length,
-                concentrador: postes.filter(p => p.concentrador).length,
-                telecom: postes.filter(p => p.telecom).length,
-                medicao: postes.filter(p => p.medicao).length,
+                transformador: await prisma.postes.count({ where: { ...where, transformador: true } }),
+                concentrador: await prisma.postes.count({ where: { ...where, concentrador: true } }),
+                telecom: await prisma.postes.count({ where: { ...where, telecom: true } }),
+                medicao: await prisma.postes.count({ where: { ...where, medicao: true } }),
                 tiposPoste: contarPorValor('estruturaposte')
             },
             estrutura: {
@@ -424,7 +440,8 @@ router.get('/relatorios/postes', async (req, res) => {
                 potenciaMedia: calcularMedia('potenciaLampada'),
                 tiposReator: contarPorValor('tipoReator'),
                 tiposComando: contarPorValor('tipoComando'),
-                led: postes.filter(p => p.tipoLampada === 'LED').length
+                led: postes.filter(p => p.tipoLampada === 'LED').length,
+                vaporSodio70: postes.filter(p => p.tipoLampada === 'Vapor de Sódio' && p.potenciaLampada === 70).length
             },
             redeEletrica: {
                 tiposRede: contarPorValor('tipoRede'),
@@ -450,11 +467,17 @@ router.get('/relatorios/postes', async (req, res) => {
             }
         };
 
-        // Resposta final adaptada para o frontend
+        // Resposta final
         res.json({
             success: true,
-            data: tipoRelatorio === 'detalhado' ? postes : null,
-            meta: estatisticas
+            data: tipoRelatorio === 'estatisticas' ? null : postes,
+            meta: estatisticas,
+            pagination: {
+                page: +page,
+                per_page: +per_page,
+                total: totalCount,
+                total_pages: Math.ceil(totalCount / per_page)
+            }
         });
 
     } catch (error) {
