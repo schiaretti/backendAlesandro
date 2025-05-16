@@ -239,7 +239,6 @@ router.delete('/deletar-usuario/:id', auth, verificarAdmin, async (req, res) => 
     }
 });
 
-// routes.js
 router.get('/relatorios/postes', async (req, res) => {
     try {
         const {
@@ -264,7 +263,7 @@ router.get('/relatorios/postes', async (req, res) => {
             dataCadastroInicio, dataCadastroFim
         } = req.query;
 
-        // Construção dinâmica do 'where'
+        // Construção dinâmica do 'where' com mapeamento dos valores do frontend
         const where = {};
 
         // 1. Filtros básicos
@@ -273,14 +272,25 @@ router.get('/relatorios/postes', async (req, res) => {
         if (numero) where.numero = numero;
         if (cep) where.cep = cep;
 
-        // 2. Componentes elétricos
-        if (transformador) where.transformador = transformador === 'true';
-        if (concentrador) where.concentrador = concentrador === 'true';
-        if (telecom) where.telecom = telecom === 'true';
-        if (medicao) where.medicao = medicao === 'true';
+        // 2. Componentes elétricos - mapeando "Sim"/"Não" para boolean
+        if (transformador) where.transformador = transformador === "Sim";
+        if (concentrador) where.concentrador = concentrador === "Sim";
+        if (telecom) where.telecom = telecom === "Sim";
+        if (medicao) where.medicao = medicao === "Sim";
 
         // 3. Iluminação
-        if (tipoLampada) where.tipoLampada = tipoLampada;
+        if (tipoLampada) {
+            // Mapeia os valores do frontend para o padrão do banco
+            const mapLampada = {
+                "Vapor de Sodio VS": "Vapor de Sódio",
+                "Vapor de Mercúrio VM": "Vapor de Mercúrio",
+                "Mista": "Mista",
+                "Led": "LED",
+                "Desconhecida": "Desconhecido"
+            };
+            where.tipoLampada = mapLampada[tipoLampada] || tipoLampada;
+        }
+        
         if (tipoReator) where.tipoReator = tipoReator;
         if (tipoComando) where.tipoComando = tipoComando;
         if (potenciaMin || potenciaMax) {
@@ -292,7 +302,23 @@ router.get('/relatorios/postes', async (req, res) => {
 
         // 4. Características físicas
         if (estruturaposte) where.estruturaposte = estruturaposte;
-        if (tipoBraco) where.tipoBraco = tipoBraco;
+        
+        if (tipoBraco) {
+            // Mapeia os valores do frontend para o padrão do banco
+            const mapBraco = {
+                "Braço Curto": "Curto",
+                "Braço Médio": "Médio",
+                "Braço Longo": "Longo",
+                "Level 1": "Level1",
+                "Level 2": "Level2",
+                "Suporte com 1": "Suporte1",
+                "Suporte com 2": "Suporte2",
+                "Suporte com 3": "Suporte3",
+                "Suporte com 4": "Suporte4"
+            };
+            where.tipoBraco = mapBraco[tipoBraco] || tipoBraco;
+        }
+        
         if (alturaposteMin || alturaposteMax) {
             where.alturaposte = {
                 gte: alturaposteMin ? +alturaposteMin : undefined,
@@ -315,14 +341,22 @@ router.get('/relatorios/postes', async (req, res) => {
         // 5. Rede elétrica
         if (tipoRede) where.tipoRede = tipoRede;
         if (tipoCabo) where.tipoCabo = tipoCabo;
-        if (numeroFases) where.numeroFases = numeroFases;
+        if (numeroFases) {
+            // Mapeia os valores do frontend para o padrão do banco
+            const mapFases = {
+                "Monofásico": "1",
+                "Bifásico": "2",
+                "Trifásico": "3"
+            };
+            where.numeroFases = mapFases[numeroFases] || numeroFases;
+        }
 
         // 6. Infraestrutura
         if (tipoVia) where.tipoVia = tipoVia;
         if (hierarquiaVia) where.hierarquiaVia = hierarquiaVia;
         if (tipoPavimento) where.tipoPavimento = tipoPavimento;
         if (tipoPasseio) where.tipoPasseio = tipoPasseio;
-        if (canteiroCentral) where.canteiroCentral = canteiroCentral === 'true';
+        if (canteiroCentral) where.canteiroCentral = canteiroCentral === "Sim";
         if (quantidadeFaixasMin || quantidadeFaixasMax) {
             where.quantidadeFaixas = {
                 gte: quantidadeFaixasMin ? +quantidadeFaixasMin : undefined,
@@ -354,81 +388,129 @@ router.get('/relatorios/postes', async (req, res) => {
             };
         }
 
-        // Relatório detalhado
+        // Busca os postes com os filtros aplicados
         const postes = await prisma.postes.findMany({
             where,
             select: {
-                // Identificação
                 numeroIdentificacao: true,
                 cidade: true,
                 endereco: true,
                 numero: true,
                 cep: true,
                 localizacao: true,
-
-                // Características Físicas
                 alturaposte: true,
                 estruturaposte: true,
                 tipoBraco: true,
                 tamanhoBraco: true,
                 quantidadePontos: true,
-
-                // Componentes
                 transformador: true,
                 concentrador: true,
                 telecom: true,
                 medicao: true,
-
-                // Iluminação
                 tipoLampada: true,
                 potenciaLampada: true,
                 tipoReator: true,
                 tipoComando: true,
-
-                // Rede Elétrica
                 tipoRede: true,
                 tipoCabo: true,
                 numeroFases: true,
-
-                // Infraestrutura
                 tipoVia: true,
                 hierarquiaVia: true,
                 tipoPavimento: true,
                 quantidadeFaixas: true,
                 tipoPasseio: true,
-
-                // Outros
                 finalidadeInstalacao: true,
                 especieArvore: true,
                 canteiroCentral: true,
                 larguraCanteiro: true,
                 distanciaEntrePostes: true,
-
-                // Datas (se existirem)
                 dataCadastro: true,
                 dataAtualizacao: true
             },
             orderBy: { numeroIdentificacao: 'asc' }
         });
 
+        // Funções auxiliares para estatísticas
+        const calcularMedia = (campo) => {
+            const valores = postes.filter(p => p[campo] !== null && p[campo] !== undefined)
+                                .map(p => parseFloat(p[campo]));
+            return valores.length > 0 ? (valores.reduce((a, b) => a + b, 0) / valores.length).toFixed(2) : 0;
+        };
+
+        const contarPorValor = (campo) => {
+            const contagem = {};
+            postes.forEach(p => {
+                const valor = p[campo] || 'Não informado';
+                contagem[valor] = (contagem[valor] || 0) + 1;
+            });
+            return Object.entries(contagem).map(([valor, count]) => ({ valor, count }));
+        };
+
+        // Gerar estatísticas compatíveis com o frontend
+        const estatisticas = {
+            total: postes.length,
+            componentes: {
+                transformador: postes.filter(p => p.transformador).length,
+                concentrador: postes.filter(p => p.concentrador).length,
+                telecom: postes.filter(p => p.telecom).length,
+                medicao: postes.filter(p => p.medicao).length,
+                tiposPoste: contarPorValor('estruturaposte')
+            },
+            estrutura: {
+                alturaposteMedia: calcularMedia('alturaposte'),
+                tiposBraco: contarPorValor('tipoBraco'),
+                tamanhoBracoMedia: calcularMedia('tamanhoBraco'),
+                pontosLuminicosMedia: calcularMedia('quantidadePontos')
+            },
+            iluminacao: {
+                tiposLampada: contarPorValor('tipoLampada'),
+                potenciaMedia: calcularMedia('potenciaLampada'),
+                tiposReator: contarPorValor('tipoReator'),
+                tiposComando: contarPorValor('tipoComando'),
+                vaporSodio70: postes.filter(p => p.tipoLampada === 'Vapor de Sódio' && p.potenciaLampada == 70).length,
+                led: postes.filter(p => p.tipoLampada === 'LED').length
+            },
+            redeEletrica: {
+                tiposRede: contarPorValor('tipoRede'),
+                tiposCabo: contarPorValor('tipoCabo'),
+                distribuicaoFases: contarPorValor('numeroFases')
+            },
+            infraestrutura: {
+                tiposVia: contarPorValor('tipoVia'),
+                hierarquiaVias: contarPorValor('hierarquiaVia'),
+                tiposPavimento: contarPorValor('tipoPavimento'),
+                faixasMedia: calcularMedia('quantidadeFaixas'),
+                tiposPasseio: contarPorValor('tipoPasseio'),
+                comCanteiro: postes.filter(p => p.canteiroCentral).length,
+                larguraCanteiroMedia: calcularMedia('larguraCanteiro')
+            },
+            outros: {
+                finalidades: contarPorValor('finalidadeInstalacao'),
+                especiesArvore: contarPorValor('especieArvore'),
+                distanciaMedia: calcularMedia('distanciaEntrePostes'),
+                numerosIdentificacao: {
+                    total: postes.filter(p => p.numeroIdentificacao).length,
+                    unicos: new Set(postes.map(p => p.numeroIdentificacao)).size
+                }
+            }
+        };
+
+        // Resposta final adaptada para o frontend
         res.json({
             success: true,
-            data: postes,
-            meta: {
-                total: postes.length,
-                ...(tipoRelatorio === 'por-rua' && {
-                    comTransformador: postes.filter(p => p.transformador).length,
-                    comConcentrador: postes.filter(p => p.concentrador).length
-                })
-            }
+            data: tipoRelatorio === 'detalhado' ? postes : null,
+            meta: estatisticas
         });
 
     } catch (error) {
         console.error('Erro no relatório:', error);
-        res.status(500).json({ success: false, error: "Erro ao gerar relatório" });
+        res.status(500).json({ 
+            success: false, 
+            error: "Erro ao gerar relatório",
+            details: process.env.NODE_ENV === 'development' ? error.message : undefined
+        });
     }
 });
-
 
 
 export default router;
