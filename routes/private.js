@@ -564,7 +564,7 @@ router.get('/relatorios/postes-com-fotos', async (req, res) => {
         if (endereco) where.endereco = { contains: endereco, mode: 'insensitive' };
         if (numero) where.numero = numero;
         if (cep) where.cep = cep;
-        if (localizacao) where.cep = localizacao;
+        if (localizacao) where.localizacao = localizacao;
 
         // 3.2 Componentes elétricos (convertendo string "true"/"false" para boolean)
         if (transformador) where.transformador = transformador === "true";
@@ -675,7 +675,7 @@ router.get('/relatorios/postes-com-fotos', async (req, res) => {
                     quantidadePontos: true,
                     tipoLampada: true,
                     potenciaLampada: true,
-                     tipoReator: true,
+                    tipoReator: true,
                     tipoComando: true,
                     tipoRede: true,
                     tipoCabo: true,
