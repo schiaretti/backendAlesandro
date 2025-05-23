@@ -1,0 +1,10 @@
+{
+  "mounts": {
+    "uploads": "/data/uploads"
+  },
+  "volumes": {
+    "uploads": {
+      "path": "/data/uploads"
+    }
+  }
+}
