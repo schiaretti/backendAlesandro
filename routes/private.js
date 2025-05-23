@@ -692,7 +692,7 @@ router.get('/relatorios/postes-com-fotos', async (req, res) => {
                     fotos: {
                         where: tipoFoto ? { tipo: tipoFoto } : undefined, // Filtra por tipo de foto se fornecido
                         select: {
-                            _id: true,
+                            id: true,
                             url: true,
                             tipo: true,
                             fotoLatitude: true,
