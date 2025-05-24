@@ -121,7 +121,13 @@ const __dirname = path.dirname(__filename);
 const prisma = new PrismaClient();
 const app = express();
 const PORT = process.env.PORT || 3000;
-const uploadDir = path.join(__dirname, 'uploads');
+const uploadDir = process.env.UPLOAD_DIR || path.join(__dirname, 'uploads');
+
+// Garante que o diretório existe
+if (!fs.existsSync(uploadDir)) {
+  fs.mkdirSync(uploadDir, { recursive: true });
+  console.log(`📁 Diretório de uploads criado em: ${uploadDir}`);
+}
 
 // 1. Configuração do diretório de uploads
 const ensureUploadsDir = () => {
@@ -149,13 +155,10 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
 // 3. Servir arquivos estáticos com configurações otimizadas
-app.use('/uploads', cors(), express.static(uploadDir, {
-  setHeaders: (res, path) => {
-    if (path.endsWith('.jpg') || path.endsWith('.png') || path.endsWith('.jpeg')) {
-      res.set('Cache-Control', 'public, max-age=31536000, immutable');
-    }
-  },
-  fallthrough: false
+app.use('/uploads', express.static(uploadDir, {
+  setHeaders: (res) => {
+    res.set('Cache-Control', 'public, max-age=31536000');
+  }
 }));
 
 // 4. Rotas
