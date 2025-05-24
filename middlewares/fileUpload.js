@@ -204,7 +204,7 @@ export const handleUpload = (options = {}) => {
   const uploadDir = config.uploadDir;
 
   const uploader = multer({
-    storage: createStorage(uploadDir),
+    storage: storage,
     fileFilter: createFileFilter(config.allowedMimeTypes),
     limits: {
       fileSize: config.maxFileSize,
