@@ -121,161 +121,20 @@ export {
     fileFilter 
 };*/
 
-import multer from 'multer';
-import path from 'path';
-import fs from 'fs/promises';
-import { fileURLToPath } from 'url';
-import { createRequire } from 'module';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-const require = createRequire(import.meta.url);
-
-// Configurações globais
-const DEFAULT_OPTIONS = {
-  maxFileSize: 5 * 1024 * 1024, // 5MB
-  maxFiles: 10,
-  allowedMimeTypes: ['image/jpeg', 'image/png', 'image/jpg'],
-  uploadDir: process.env.UPLOAD_DIR || path.join(__dirname, 'uploads')
-};
-
-// Utilitários
-const generateUniqueFilename = (originalname) => {
-  const ext = path.extname(originalname);
-  const timestamp = Date.now();
-  const randomString = Math.random().toString(36).substring(2, 8);
-  return `foto_${timestamp}_${randomString}${ext}`;
-};
-
-// Gerenciamento de arquivos
-class FileManager {
-  static async ensureUploadDir(uploadDir) {
-    try {
-      await fs.access(uploadDir);
-    } catch {
-      await fs.mkdir(uploadDir, { recursive: true });
-      console.log(`Diretório criado: ${uploadDir}`);
-    }
-  }
-
-  static async cleanFiles(files) {
-    if (!files?.length) return;
-
-    await Promise.all(files.map(async (file) => {
-      try {
-        await fs.unlink(file.path);
-        console.log(`Arquivo removido: ${file.path}`);
-      } catch (err) {
-        console.error(`Erro ao remover ${file.path}:`, err.message);
-      }
-    }));
-  }
-}
-
-// Configuração do Multer
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    const uploadPath = process.env.UPLOAD_DIR || path.join(__dirname, 'uploads');
-    fs.mkdirSync(uploadPath, { recursive: true });
-    cb(null, uploadPath);
-  },
-  filename: (req, file, cb) => {
-    const uniqueName = `foto_${Date.now()}-${Math.random().toString(36).slice(2, 8)}${path.extname(file.originalname)}`;
-    cb(null, uniqueName);
-  }
+import AWS from 'aws-sdk';
+const s3 = new AWS.S3({
+  accessKeyId: process.env.AWS_ACCESS_KEY,
+  secretAccessKey: process.env.AWS_SECRET_KEY,
 });
 
-const createFileFilter = (allowedTypes) => (req, file, cb) => {
-  const isValidMimeType = allowedTypes.includes(file.mimetype);
-  const isValidExtension = allowedTypes.some(type => 
-    file.originalname.toLowerCase().endsWith(type.split('/')[1])
-  );
-
-  if (isValidMimeType && isValidExtension) {
-    cb(null, true);
-  } else {
-    cb(new Error(`Tipo de arquivo inválido. Permitidos: ${allowedTypes.join(', ')}`), false);
-  }
-};
-
-// Middleware principal
-export const handleUpload = (options = {}) => {
-  const config = { ...DEFAULT_OPTIONS, ...options };
-  const uploadDir = config.uploadDir;
-
-  const uploader = multer({
-    storage: storage,
-    fileFilter: createFileFilter(config.allowedMimeTypes),
-    limits: {
-      fileSize: config.maxFileSize,
-      files: config.maxFiles
-    }
-  });
-
-  return async (req, res, next) => {
-    try {
-      // Normaliza os campos de metadados
-      const normalizeFields = () => {
-        const arrayFields = ['tipos', 'especies', 'latitudes', 'longitudes'];
-        arrayFields.forEach(field => {
-          if (req.body[field] && !Array.isArray(req.body[field])) {
-            req.body[field] = [req.body[field]];
-          }
-        });
-      };
-
-      // Processa o upload
-      await new Promise((resolve, reject) => {
-        normalizeFields();
-        
-        uploader.array('fotos')(req, res, (err) => {
-          if (err) {
-            reject(err);
-            return;
-          }
-          resolve();
-        });
-      });
-
-      // Adiciona metadados aos arquivos
-      if (req.files?.length && req.body.tipos) {
-        req.files.forEach((file, index) => {
-          file.metadata = {
-            tipo: req.body.tipos[index] || 'OUTRO',
-            especieArvore: req.body.especies?.[index],
-            coordenadas: {
-              latitude: parseFloat(req.body.latitudes?.[index]) || null,
-              longitude: parseFloat(req.body.longitudes?.[index]) || null
-            }
-          };
-        });
-
-        console.debug('Arquivos processados:', req.files.map(f => ({
-          filename: f.filename,
-          ...f.metadata
-        })));
-      }
-
-      next();
-    } catch (err) {
-      await FileManager.cleanFiles(req.files);
-
-      const errorMessages = {
-        LIMIT_FILE_SIZE: `Tamanho máximo excedido (${config.maxFileSize / 1024 / 1024}MB)`,
-        LIMIT_FILE_COUNT: `Máximo de ${config.maxFiles} arquivos permitidos`,
-        LIMIT_UNEXPECTED_FILE: 'Campo de upload inválido'
-      };
-
-      res.status(400).json({
-        success: false,
-        message: errorMessages[err.code] || 'Falha no upload de arquivos',
-        details: process.env.NODE_ENV === 'development' ? err.message : undefined
-      });
-    }
+const uploadToS3 = async (file) => {
+  const params = {
+    Bucket: process.env.S3_BUCKET,
+    Key: `uploads/${file.filename}`,
+    Body: await fs.readFile(file.path),
+    ContentType: file.mimetype,
   };
+  const result = await s3.upload(params).promise();
+  await fs.unlink(file.path); // Remove o arquivo local
+  return result.Location; // URL pública
 };
-
-
-// Exportações
-export const cleanUploads = FileManager.cleanFiles;
-export const fileFilter = createFileFilter(DEFAULT_OPTIONS.allowedMimeTypes);
