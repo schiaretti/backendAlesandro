@@ -13,39 +13,7 @@ const prisma = new PrismaClient()
 const router = express.Router()
 const JWT_SECRET = process.env.JWT_SECRET
 
-// Configuração do cliente S3 (coloque isso no início do seu arquivo de rotas)
-const s3 = new S3Client({
-  region: process.env.AWS_REGION,
-  credentials: {
-    accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
-  },
-});
 
-// Função para upload no S3
-const uploadToS3 = async (file) => {
-  const params = {
-    Bucket: process.env.S3_BUCKET_NAME,
-    Key: `uploads/${file.filename}`,
-    Body: await fs.readFile(file.path),
-    ContentType: file.mimetype,
-    ACL: 'public-read', // Para tornar o arquivo publicamente acessível
-  };
-
-  try {
-    const parallelUploads3 = new Upload({
-      client: s3,
-      params,
-    });
-
-    const result = await parallelUploads3.done();
-    await fs.unlink(file.path); // Remove o arquivo local após upload
-    return result.Location; // Retorna a URL pública do arquivo
-  } catch (err) {
-    await fs.unlink(file.path); // Limpeza em caso de erro
-    throw err;
-  }
-};
 
 
 // Rota de login corrigida
@@ -489,224 +457,41 @@ router.get('/count-postes', async (req, res) => {
     }
 });
 
-/*router.post('/postes', handleUpload({ maxFiles: 10 }), async (req, res) => {
-    try {
-        const { body, files } = req;
+// Configuração do cliente S3
+const s3 = new S3Client({
+  region: process.env.AWS_REGION,
+  credentials: {
+    accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+  },
+});
 
-        // 1. Validação dos campos obrigatórios
-        const requiredFields = ['cidade', 'endereco', 'numero', 'usuarioId', 'numeroIdentificacao'];
-        const missingFields = requiredFields.filter(field => !body[field]);
+// Função otimizada para upload no S3
+const uploadToS3 = async (file) => {
+  const params = {
+    Bucket: process.env.S3_BUCKET_NAME,
+    Key: `postes/${Date.now()}-${file.originalname}`,
+    Body: await fs.readFile(file.path),
+    ContentType: file.mimetype,
+    ACL: 'public-read',
+  };
 
-        if (missingFields.length > 0) {
-            cleanUploads(files);
-            return res.status(400).json({
-                success: false,
-                message: `Campos obrigatórios faltando: ${missingFields.join(', ')}`,
-                code: 'MISSING_REQUIRED_FIELDS'
-            });
-        }
+  try {
+    const parallelUpload = new Upload({
+      client: s3,
+      params,
+      queueSize: 4, // Upload paralelo para arquivos grandes
+      partSize: 5 * 1024 * 1024, // 5MB por parte
+    });
 
-        // 2. Validação do formato do numeroIdentificacao
-        if (!/^\d{5}-\d{1}$/.test(body.numeroIdentificacao)) {
-            cleanUploads(files);
-            return res.status(400).json({
-                success: false,
-                message: 'Formato do número do poste inválido. Deve ser XXXXX-X (5 dígitos, traço, 1 dígito)',
-                code: 'INVALID_POST_NUMBER_FORMAT'
-            });
-        }
-
-        // 3. Validação das coordenadas
-        let latitude, longitude;
-        try {
-            const coords = body.coords ? JSON.parse(body.coords) : [null, null];
-            latitude = parseFloat(coords[0]);
-            longitude = parseFloat(coords[1]);
-
-            if (isNaN(latitude) || isNaN(longitude) ||
-                latitude < -90 || latitude > 90 ||
-                longitude < -180 || longitude > 180) {
-                throw new Error('Valores inválidos');
-            }
-        } catch (error) {
-            cleanUploads(files);
-            return res.status(400).json({
-                success: false,
-                message: 'Coordenadas inválidas. Formato esperado: [latitude, longitude] com valores numéricos',
-                code: 'INVALID_COORDINATES'
-            });
-        }
-
-        // Tipos de foto e validações
-        const TIPOS_FOTO = {
-            PANORAMICA: 'PANORAMICA',
-            LUMINARIA: 'LUMINARIA',
-            ARVORE: 'ARVORE',
-            TELECOM: 'TELECOM',
-            LAMPADA: 'LAMPADA',
-            OUTRO: 'OUTRO'
-        };
-
-        // Verificação de fotos obrigatórias
-        const requiredPhotos = [TIPOS_FOTO.PANORAMICA, TIPOS_FOTO.LUMINARIA];
-        const uploadedPhotoTypes = files?.map(f => f.tipo) || [];
-
-        const missingRequiredPhotos = requiredPhotos.filter(
-            requiredType => !uploadedPhotoTypes.includes(requiredType)
-        );
-
-        if (missingRequiredPhotos.length > 0) {
-            cleanUploads(files);
-            return res.status(400).json({
-                success: false,
-                message: `Fotos obrigatórias faltando: ${missingRequiredPhotos.join(', ')}`,
-                code: 'MISSING_REQUIRED_PHOTOS'
-            });
-        }
-
-        // Processamento de metadados
-        const processArrayField = (field) => {
-            if (!field) return [];
-            return Array.isArray(field) ? field : [field];
-        };
-
-        const especies = processArrayField(body.especies);
-        const coordsArvores = processArrayField(body.coordsArvore);
-
-        // Validação específica para fotos de árvores
-        const treePhotos = files?.filter(f => f.tipo === TIPOS_FOTO.ARVORE) || [];
-
-        if (treePhotos.length > 0) {
-            if (treePhotos.length !== especies.length) {
-                cleanUploads(files);
-                return res.status(400).json({
-                    success: false,
-                    message: 'Todas as fotos de árvores devem ter uma espécie associada',
-                    code: 'MISSING_TREE_SPECIES'
-                });
-            }
-
-        }
-
-        // Criação do poste com transação
-        const poste = await prisma.$transaction(async (prisma) => {
-            // Preparar dados das fotos (sem IDs únicos)
-            const fotosData = files?.map((file, index) => {
-                const fotoData = {
-                    url: `/uploads/${file.filename}`,
-                    tipo: file.tipo,
-                    fotoLatitude: latitude, // Coordenadas padrão do poste
-                    fotoLongitude: longitude
-                };
-
-                // Adiciona metadados específicos para árvores
-                if (file.tipo === TIPOS_FOTO.ARVORE) {
-                    fotoData.especieArvore = especies[index];
-
-                    // Sobrescreve coordenadas se específicas
-                    if (coordsArvores[index]) {
-                        const [lat, lng] = JSON.parse(coordsArvores[index]);
-                        fotoData.fotoLatitude = lat;
-                        fotoData.fotoLongitude = lng;
-                    }
-                }
-
-                return fotoData;
-            });
-
-
-            return await prisma.postes.create({
-                data: {
-                    numeroIdentificacao: body.numeroIdentificacao,
-                    latitude: latitude,
-                    longitude: longitude,
-                    cidade: body.cidade,
-                    endereco: body.endereco,
-                    numero: body.numero,
-                    cep: body.cep,
-                    isLastPost: body.isLastPost === 'true',
-                    canteiroCentral: body.canteiroCentral === 'true',
-                    larguraCanteiro: body.larguraCanteiro  ? parseInt(body.larguraCanteiro) : null,
-                    usuarioId: body.usuarioId,
-                    emFrente: body.emFrente,
-                    localizacao: body.localizacao,
-                    transformador: body.transformador,
-                    medicao: body.medicao,
-                    telecom: body.telecom,
-                    distanciaEntrePostes: body.distanciaEntrePostes ? parseInt(body.distanciaEntrePostes) : null,
-                    concentrador: body.concentrador,
-                    poste: body.poste,
-                    alturaposte: body.alturaposte ? parseFloat(body.alturaposte) : null,
-                    estruturaposte: body.estruturaposte,
-                    tipoBraco: body.tipoBraco,
-                    tamanhoBraco: body.tamanhoBraco ? parseFloat(body.tamanhoBraco) : null,
-                    quantidadePontos: body.quantidadePontos ? parseInt(body.quantidadePontos) : null,
-                    tipoLampada: body.tipoLampada,
-                    potenciaLampada: body.potenciaLampada ? parseInt(body.potenciaLampada) : null,
-                    tipoReator: body.tipoReator,
-                    tipoComando: body.tipoComando,
-                    tipoRede: body.tipoRede,
-                    tipoCabo: body.tipoCabo,
-                    numeroFases: body.numeroFases,
-                    tipoVia: body.tipoVia,
-                    hierarquiaVia: body.hierarquiaVia,
-                    tipoPavimento: body.tipoPavimento,
-                    quantidadeFaixas: body.quantidadeFaixas ? parseInt(body.quantidadeFaixas) : null,
-                    tipoPasseio: body.tipoPasseio,
-                    finalidadeInstalacao: body.finalidadeInstalacao,
-                    especieArvore: body.especieArvore,
-                    fotos: {
-                        create: fotosData
-                    }
-                },
-                include: {
-                    fotos: true
-                }
-            });
-        });
-
-        res.status(201).json({
-            success: true,
-            data: poste
-        });
-
-    } catch (error) {
-        cleanUploads(req.files);
-
-        console.error('Erro ao criar poste:', {
-            message: error.message,
-            stack: error.stack,
-            body: req.body
-        });
-
-        if (error.code === 'P2002') {
-            if (error.meta?.target?.includes('numeroIdentificacao')) {
-                return res.status(400).json({
-                    success: false,
-                    message: 'Número do poste já existe no sistema',
-                    code: 'DUPLICATE_POST_NUMBER'
-                });
-            }
-            if (error.meta?.target?.includes('Foto_idUnicoArvore_key')) {
-                return res.status(400).json({
-                    success: false,
-                    message: 'ID de árvore já existe no sistema',
-                    code: 'DUPLICATE_TREE_ID'
-                });
-            }
-        }
-
-        res.status(500).json({
-            success: false,
-            message: 'Erro interno no servidor',
-            code: 'INTERNAL_SERVER_ERROR',
-            details: process.env.NODE_ENV === 'development' ? {
-                error: error.message,
-                stack: error.stack
-            } : undefined
-        });
-    }
-});*/
+    const result = await parallelUpload.done();
+    await fs.unlink(file.path); // Remove o arquivo local
+    return result.Location;
+  } catch (err) {
+    await fs.unlink(file.path).catch(() => {}); // Limpeza em caso de erro
+    throw new Error(`Falha no upload para S3: ${err.message}`);
+  }
+};
 
 router.post('/postes', handleUpload({ maxFiles: 10 }), async (req, res) => {
     try {
@@ -717,7 +502,7 @@ router.post('/postes', handleUpload({ maxFiles: 10 }), async (req, res) => {
         const missingFields = requiredFields.filter(field => !body[field]);
 
         if (missingFields.length > 0) {
-            cleanUploads(files);
+            await cleanUploads(files);
             return res.status(400).json({
                 success: false,
                 message: `Campos obrigatórios faltando: ${missingFields.join(', ')}`,
@@ -725,12 +510,13 @@ router.post('/postes', handleUpload({ maxFiles: 10 }), async (req, res) => {
             });
         }
 
-        // 2. Validação do formato do numeroIdentificacao
-        if (!/^\d{5}-\d{1}$/.test(body.numeroIdentificacao)) {
-            cleanUploads(files);
+        // 2. Validação do formato do poste
+        const posteRegex = /^\d{5}-\d{1}$/;
+        if (!posteRegex.test(body.numeroIdentificacao)) {
+            await cleanUploads(files);
             return res.status(400).json({
                 success: false,
-                message: 'Formato do número do poste inválido. Deve ser XXXXX-X (5 dígitos, traço, 1 dígito)',
+                message: 'Formato inválido. Use: XXXXX-X (5 dígitos, traço, 1 dígito)',
                 code: 'INVALID_POST_NUMBER_FORMAT'
             });
         }
@@ -748,10 +534,10 @@ router.post('/postes', handleUpload({ maxFiles: 10 }), async (req, res) => {
                 throw new Error('Valores inválidos');
             }
         } catch (error) {
-            cleanUploads(files);
+            await cleanUploads(files);
             return res.status(400).json({
                 success: false,
-                message: 'Coordenadas inválidas. Formato esperado: [latitude, longitude] com valores numéricos',
+                message: 'Coordenadas inválidas. Formato esperado: [latitude, longitude]',
                 code: 'INVALID_COORDINATES'
             });
         }
@@ -775,7 +561,7 @@ router.post('/postes', handleUpload({ maxFiles: 10 }), async (req, res) => {
         );
 
         if (missingRequiredPhotos.length > 0) {
-            cleanUploads(files);
+            await cleanUploads(files);
             return res.status(400).json({
                 success: false,
                 message: `Fotos obrigatórias faltando: ${missingRequiredPhotos.join(', ')}`,
@@ -784,50 +570,53 @@ router.post('/postes', handleUpload({ maxFiles: 10 }), async (req, res) => {
         }
 
         // Processamento de metadados
-        const processArrayField = (field) => {
-            if (!field) return [];
-            return Array.isArray(field) ? field : [field];
-        };
+        const processArrayField = (field) => 
+            field ? (Array.isArray(field) ? field : [field]) : [];
 
         const especies = processArrayField(body.especies);
         const coordsArvores = processArrayField(body.coordsArvore);
 
         // Validação específica para fotos de árvores
         const treePhotos = files?.filter(f => f.tipo === TIPOS_FOTO.ARVORE) || [];
-
-        if (treePhotos.length > 0) {
-            if (treePhotos.length !== especies.length) {
-                cleanUploads(files);
-                return res.status(400).json({
-                    success: false,
-                    message: 'Todas as fotos de árvores devem ter uma espécie associada',
-                    code: 'MISSING_TREE_SPECIES'
-                });
-            }
+        if (treePhotos.length > 0 && treePhotos.length !== especies.length) {
+            await cleanUploads(files);
+            return res.status(400).json({
+                success: false,
+                message: 'Todas as fotos de árvores devem ter uma espécie associada',
+                code: 'MISSING_TREE_SPECIES'
+            });
         }
 
         // Criação do poste com transação
         const poste = await prisma.$transaction(async (prisma) => {
-            // Upload de todas as fotos para o S3
+            // Upload paralelo para o S3
             const fotosData = await Promise.all(files.map(async (file, index) => {
                 const s3Url = await uploadToS3(file);
                 
                 const fotoData = {
-                    url: s3Url, // Usa a URL do S3 em vez do caminho local
+                    url: s3Url,
                     tipo: file.tipo,
                     fotoLatitude: latitude,
-                    fotoLongitude: longitude
+                    fotoLongitude: longitude,
+                    metadata: {
+                        originalName: file.originalname,
+                        size: file.size,
+                        mimetype: file.mimetype
+                    }
                 };
 
-                // Adiciona metadados específicos para árvores
+                // Metadados específicos para árvores
                 if (file.tipo === TIPOS_FOTO.ARVORE) {
                     fotoData.especieArvore = especies[index];
-
-                    // Sobrescreve coordenadas se específicas
+                    
                     if (coordsArvores[index]) {
-                        const [lat, lng] = JSON.parse(coordsArvores[index]);
-                        fotoData.fotoLatitude = lat;
-                        fotoData.fotoLongitude = lng;
+                        try {
+                            const [lat, lng] = JSON.parse(coordsArvores[index]);
+                            fotoData.fotoLatitude = lat;
+                            fotoData.fotoLongitude = lng;
+                        } catch (e) {
+                            console.error('Erro ao parsear coordenadas:', e);
+                        }
                     }
                 }
 
@@ -837,8 +626,8 @@ router.post('/postes', handleUpload({ maxFiles: 10 }), async (req, res) => {
             return await prisma.postes.create({
                 data: {
                     numeroIdentificacao: body.numeroIdentificacao,
-                    latitude: latitude,
-                    longitude: longitude,
+                    latitude,
+                    longitude,
                     cidade: body.cidade,
                     endereco: body.endereco,
                     numero: body.numero,
@@ -890,9 +679,9 @@ router.post('/postes', handleUpload({ maxFiles: 10 }), async (req, res) => {
         });
 
     } catch (error) {
-        // Limpeza de arquivos em caso de erro
+        // Limpeza garantida em caso de erro
         if (req.files) {
-            await cleanUploads(req.files);
+            await cleanUploads(req.files).catch(console.error);
         }
 
         console.error('Erro ao criar poste:', {
@@ -901,21 +690,25 @@ router.post('/postes', handleUpload({ maxFiles: 10 }), async (req, res) => {
             body: req.body
         });
 
+        // Tratamento de erros específicos
         if (error.code === 'P2002') {
-            if (error.meta?.target?.includes('numeroIdentificacao')) {
-                return res.status(400).json({
-                    success: false,
-                    message: 'Número do poste já existe no sistema',
-                    code: 'DUPLICATE_POST_NUMBER'
-                });
-            }
-            if (error.meta?.target?.includes('Foto_idUnicoArvore_key')) {
-                return res.status(400).json({
-                    success: false,
-                    message: 'ID de árvore já existe no sistema',
-                    code: 'DUPLICATE_TREE_ID'
-                });
-            }
+            const target = error.meta?.target;
+            return res.status(400).json({
+                success: false,
+                message: target?.includes('numeroIdentificacao') 
+                    ? 'Número do poste já existe' 
+                    : 'ID de árvore duplicado',
+                code: 'DUPLICATE_ENTRY'
+            });
+        }
+
+        // Erros de upload para S3
+        if (error.message.includes('Falha no upload para S3')) {
+            return res.status(502).json({
+                success: false,
+                message: 'Erro ao armazenar imagens',
+                code: 'STORAGE_ERROR'
+            });
         }
 
         res.status(500).json({
@@ -929,7 +722,6 @@ router.post('/postes', handleUpload({ maxFiles: 10 }), async (req, res) => {
         });
     }
 });
-
 
 router.put('/postes/:id/localizacao', async (req, res) => {
     console.log('Iniciando atualização de localização:', req.params.id, req.body);
