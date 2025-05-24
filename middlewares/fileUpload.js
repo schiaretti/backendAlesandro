@@ -173,13 +173,15 @@ class FileManager {
 }
 
 // Configuração do Multer
-const createStorage = (uploadDir) => multer.diskStorage({
-  destination: async (req, file, cb) => {
-    await FileManager.ensureUploadDir(uploadDir);
-    cb(null, uploadDir);
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const uploadPath = process.env.UPLOAD_DIR || path.join(__dirname, 'uploads');
+    fs.mkdirSync(uploadPath, { recursive: true });
+    cb(null, uploadPath);
   },
   filename: (req, file, cb) => {
-    cb(null, generateUniqueFilename(file.originalname));
+    const uniqueName = `foto_${Date.now()}-${Math.random().toString(36).slice(2, 8)}${path.extname(file.originalname)}`;
+    cb(null, uniqueName);
   }
 });
 
@@ -273,7 +275,7 @@ export const handleUpload = (options = {}) => {
   };
 };
 
+
 // Exportações
 export const cleanUploads = FileManager.cleanFiles;
-export const storage = createStorage(DEFAULT_OPTIONS.uploadDir);
 export const fileFilter = createFileFilter(DEFAULT_OPTIONS.allowedMimeTypes);

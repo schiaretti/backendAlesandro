@@ -121,7 +121,8 @@ const __dirname = path.dirname(__filename);
 const prisma = new PrismaClient();
 const app = express();
 const PORT = process.env.PORT || 3000;
-const uploadDir = process.env.UPLOAD_DIR || path.join(__dirname, 'uploads');
+const uploadDir = process.env.UPLOAD_DIR || '/data/uploads';
+app.use('/uploads', express.static(uploadDir));
 
 // Garante que o diretório existe
 if (!fs.existsSync(uploadDir)) {
@@ -143,6 +144,8 @@ app.use((req, res, next) => {
   next();
 });
 
+fs.mkdirSync(uploadDir, { recursive: true, mode: 0o755 });
+
 app.use(cors({
   origin: process.env.CORS_ORIGIN || '*',
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
@@ -158,7 +161,8 @@ app.use(express.urlencoded({ extended: true }));
 app.use('/uploads', express.static(uploadDir, {
   setHeaders: (res) => {
     res.set('Cache-Control', 'public, max-age=31536000');
-  }
+  },
+  fallthrough: false // Retorna 404 se o arquivo não existir
 }));
 
 // 4. Rotas
@@ -181,6 +185,15 @@ app.get('/health', async (req, res) => {
       database: 'desconectado',
       error: error.message
     });
+  }
+});
+
+app.get('/test-upload/:filename', (req, res) => {
+  const filePath = path.join(uploadDir, req.params.filename);
+  if (fs.existsSync(filePath)) {
+    res.sendFile(filePath);
+  } else {
+    res.status(404).json({ error: 'Arquivo não encontrado', path: filePath });
   }
 });
 
