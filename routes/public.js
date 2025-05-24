@@ -3,7 +3,7 @@ import { PrismaClient } from '@prisma/client'
 import bcrypt, { hash } from 'bcrypt'
 import jwt from 'jsonwebtoken'
 import fs from 'fs';
-import { handleUpload, cleanUploads } from '../middlewares/fileUpload.js';
+//import { handleUpload, cleanUploads } from '../middlewares/fileUpload.js';
 import AWS from 'aws-sdk';
 import { Upload } from '@aws-sdk/lib-storage';
 import { S3Client } from '@aws-sdk/client-s3';
