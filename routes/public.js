@@ -487,5 +487,6 @@ router.patch('/postes/:id/location', async (req, res) => {
     }
 });
 
+
 export default router;
 
