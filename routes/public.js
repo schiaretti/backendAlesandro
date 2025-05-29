@@ -2,7 +2,7 @@ import express from 'express';
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
-import { handleUpload } from '../middlewares/fileUpload.js';
+
 
 // Importa as funções necessárias do middleware de upload
 // Certifique-se que o caminho para fileUpload.js está correto
