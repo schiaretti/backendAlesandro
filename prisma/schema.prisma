@@ -33,6 +33,8 @@ model Postes {
   latitude           Float?
   longitude          Float?
   @@index([latitude, longitude], name: "coords_index")
+  
+  // Dados de localização
   cidade             String
   endereco           String
   numero             String
@@ -40,20 +42,20 @@ model Postes {
   isLastPost         Boolean  @default(false)
   localizacao        String?
   
-  // Dados técnicos (converti para tipos mais apropriados)
+  // Dados técnicos
   emFrente           String?
   transformador      String?
   medicao            String?
   telecom            String? 
   concentrador       String?
   poste              String?
-  alturaposte        Float?   // Melhor como número
+  alturaposte        Float?
   estruturaposte     String?
   tipoBraco          String?
-  tamanhoBraco       Float?   // Melhor como número
-  quantidadePontos   Int?     // Melhor como inteiro
+  tamanhoBraco       Float?
+  quantidadePontos   Int?
   tipoLampada        String?
-  potenciaLampada    Int?     // Melhor como inteiro (watts)
+  potenciaLampada    Int?
   tipoReator         String?
   tipoComando        String?
   tipoRede           String?
@@ -62,14 +64,12 @@ model Postes {
   tipoVia            String?
   hierarquiaVia      String?
   tipoPavimento      String?
-  quantidadeFaixas   Int?     // Melhor como inteiro
+  quantidadeFaixas   Int?
   tipoPasseio        String?
-  canteiroCentral    Boolean? // Melhor como booleano
-  larguraCanteiro   Int?
+  canteiroCentral    Boolean?
+  larguraCanteiro    Int?
   finalidadeInstalacao String?
-  especieArvore      String?
-  distanciaEntrePostes  Int?
-  
+  distanciaEntrePostes Int?
 
   // Relações
   fotos              Foto[]
@@ -77,16 +77,15 @@ model Postes {
 
 model Foto {
   id        String   @id @default(auto()) @map("_id") @db.ObjectId
-  url       String
+  path      String?  // Caminho físico do arquivo no servidor
   tipo      FotoTipo
   
-  // Coordenadas da foto (pode ser diferente do poste)
+  // Coordenadas da foto
   fotoLatitude  Float?
   fotoLongitude Float?
   
   // Metadados específicos para árvores
   especieArvore String?
- 
   
   // Relacionamento
   poste     Postes   @relation(fields: [posteId], references: [id])
@@ -96,7 +95,6 @@ model Foto {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   
- // Índice composto para buscar árvores por coordenadas + poste
   @@index([fotoLatitude, fotoLongitude, posteId], name: "foto_coords_index")
 }
 
@@ -107,4 +105,4 @@ enum FotoTipo {
   TELECOM
   LAMPADA
   OUTRO
-}
+} 
