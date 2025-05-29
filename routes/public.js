@@ -1,22 +1,21 @@
-import express from 'express'
-import { PrismaClient } from '@prisma/client'
-import bcrypt, { hash } from 'bcrypt'
-import jwt from 'jsonwebtoken'
-import fs from 'fs';
+import express from 'express';
+import { PrismaClient } from '@prisma/client';
+import bcrypt from 'bcrypt';
+import jwt from 'jsonwebtoken';
+
+// Importa as funções necessárias do middleware de upload
+// Certifique-se que o caminho para fileUpload.js está correto
 import { handleUpload, cleanUploads } from '../middlewares/fileUpload.js';
 
+const prisma = new PrismaClient();
+const router = express.Router();
+const JWT_SECRET = process.env.JWT_SECRET; // Garanta que JWT_SECRET está nas variáveis de ambiente
 
-const prisma = new PrismaClient()
-const router = express.Router()
-const JWT_SECRET = process.env.JWT_SECRET
-
-
-// Rota de login corrigida
+// --- Rota de Login --- 
 router.post('/login', async (req, res) => {
     try {
         const { email, senha } = req.body;
 
-        // Validação dos campos
         if (!email || !senha) {
             return res.status(400).json({
                 success: false,
@@ -25,7 +24,6 @@ router.post('/login', async (req, res) => {
             });
         }
 
-        // Busca o usuário
         const usuario = await prisma.usuarios.findUnique({
             where: { email }
         });
@@ -38,7 +36,6 @@ router.post('/login', async (req, res) => {
             });
         }
 
-        // Verifica a senha
         const senhaValida = await bcrypt.compare(senha, usuario.senha);
 
         if (!senhaValida) {
@@ -49,17 +46,12 @@ router.post('/login', async (req, res) => {
             });
         }
 
-        // Gera o token JWT
         const token = jwt.sign(
-            {
-                id: usuario.id,
-                nivel: usuario.nivel
-            },
-            process.env.JWT_SECRET,
-            { expiresIn: '1d' }
+            { id: usuario.id, nivel: usuario.nivel },
+            JWT_SECRET, // Usa a variável de ambiente
+            { expiresIn: '1d' } // Token expira em 1 dia
         );
 
-        // Resposta formatada corretamente
         res.status(200).json({
             success: true,
             message: 'Login realizado com sucesso',
@@ -76,299 +68,21 @@ router.post('/login', async (req, res) => {
         console.error('Erro no login:', error);
         res.status(500).json({
             success: false,
-            message: 'Erro interno no servidor',
+            message: 'Erro interno no servidor durante o login',
             code: 'INTERNAL_SERVER_ERROR',
             details: process.env.NODE_ENV === 'development' ? error.message : undefined
         });
     }
 });
 
-/*router.get('/listar-postes', async (req, res) => {
-    console.log('Iniciando listagem de postes');
-    try {
-        const { page = 1, limit = 1000 } = req.query;
-
-        // 1. Busca os postes com tratamento para campos não-nulos
-        const postes = await prisma.postes.findMany({
-            where: {
-                latitude: { not: null },  // Filtra apenas registros com latitude válida
-                longitude: { not: null }  // Filtra apenas registros com longitude válida
-            },
-            select: {
-                id: true,
-                numeroIdentificacao: true,
-                latitude: true,
-                longitude: true,
-                endereco: true,
-                cidade: true,
-                createdAt: true
-            },
-            orderBy: { createdAt: 'desc' },
-            skip: (page - 1) * limit,
-            take: Number(limit)
-        });
-
-        // 2. Formatação dos dados (agora seguro pois os valores não são nulos)
-        const postesFormatados = postes.map(poste => ({
-            id: poste.id,
-            numeroIdentificacao: poste.numeroIdentificacao,
-            endereco: poste.endereco,
-            cidade: poste.cidade,
-            coords: [poste.latitude, poste.longitude],
-            createdAt: poste.createdAt
-
-        }));
-
-        res.json({
-            success: true,
-            data: postesFormatados,
-            count: postesFormatados.length
-        });
-
-    } catch (error) {
-        console.error('Erro detalhado ao listar postes:', {
-            message: error.message,
-            stack: error.stack,
-            prismaError: error.code,
-        });
-
-        res.status(500).json({
-            success: false,
-            message: 'Erro ao listar postes',
-            details: process.env.NODE_ENV === 'development' ? error.message : 'Erro interno',
-            code: error.code
-        });
-    }
-});
-
-
-/*router.post('/postes', handleUpload({ maxFiles: 10 }), async (req, res) => {
-    try {
-        const { body, files } = req;
-
-        // 1. Validação dos campos obrigatórios
-        const requiredFields = ['cidade', 'endereco', 'numero', 'usuarioId', 'numeroIdentificacao'];
-        const missingFields = requiredFields.filter(field => !body[field]);
-
-        if (missingFields.length > 0) {
-            cleanUploads(files);
-            return res.status(400).json({
-                success: false,
-                message: `Campos obrigatórios faltando: ${missingFields.join(', ')}`,
-                code: 'MISSING_REQUIRED_FIELDS'
-            });
-        }
-
-        // 2. Validação do formato do numeroIdentificacao
-        if (!/^\d{5}-\d{1}$/.test(body.numeroIdentificacao)) {
-            cleanUploads(files);
-            return res.status(400).json({
-                success: false,
-                message: 'Formato do número do poste inválido. Deve ser XXXXX-X (5 dígitos, traço, 1 dígito)',
-                code: 'INVALID_POST_NUMBER_FORMAT'
-            });
-        }
-
-        // 3. Validação das coordenadas
-        let latitude, longitude;
-        try {
-            const coords = body.coords ? JSON.parse(body.coords) : [null, null];
-            latitude = parseFloat(coords[0]);
-            longitude = parseFloat(coords[1]);
-
-            if (isNaN(latitude) || isNaN(longitude) ||
-                latitude < -90 || latitude > 90 ||
-                longitude < -180 || longitude > 180) {
-                throw new Error('Valores inválidos');
-            }
-        } catch (error) {
-            cleanUploads(files);
-            return res.status(400).json({
-                success: false,
-                message: 'Coordenadas inválidas. Formato esperado: [latitude, longitude] com valores numéricos',
-                code: 'INVALID_COORDINATES'
-            });
-        }
-
-        // Tipos de foto e validações
-        const TIPOS_FOTO = {
-            PANORAMICA: 'PANORAMICA',
-            LUMINARIA: 'LUMINARIA',
-            ARVORE: 'ARVORE',
-            TELECOM: 'TELECOM',
-            LAMPADA: 'LAMPADA',
-            OUTRO: 'OUTRO'
-        };
-
-        // Verificação de fotos obrigatórias
-        const requiredPhotos = [TIPOS_FOTO.PANORAMICA, TIPOS_FOTO.LUMINARIA];
-        const uploadedPhotoTypes = files?.map(f => f.tipo) || [];
-
-        const missingRequiredPhotos = requiredPhotos.filter(
-            requiredType => !uploadedPhotoTypes.includes(requiredType)
-        );
-
-        if (missingRequiredPhotos.length > 0) {
-            cleanUploads(files);
-            return res.status(400).json({
-                success: false,
-                message: `Fotos obrigatórias faltando: ${missingRequiredPhotos.join(', ')}`,
-                code: 'MISSING_REQUIRED_PHOTOS'
-            });
-        }
-
-        // Dentro da transação do Prisma, antes de criar as fotos:
-        const idsExistentes = await prisma.foto.findMany({
-            where: {
-                idUnicoArvore: {
-                    in: idsUnicos.filter(id => id) // Filtra valores válidos
-                }
-            },
-            select: { idUnicoArvore: true }
-        });
-
-        if (idsExistentes.length > 0) {
-            throw new Error(`IDs de árvore já existentes: ${idsExistentes.map(f => f.idUnicoArvore).join(', ')}`);
-        }
-
-        // Processamento de metadados
-        const processArrayField = (field) => {
-            if (!field) return [];
-            return Array.isArray(field) ? field : [field];
-        };
-
-        const especies = processArrayField(body.especies);
-        const idsUnicos = processArrayField(body.idsUnicos);
-        const coordsArvores = processArrayField(body.coordsArvore);
-
-        // Validação específica para fotos de árvores
-        const treePhotos = files?.filter(f => f.tipo === TIPOS_FOTO.ARVORE) || [];
-
-        if (treePhotos.length > 0 && treePhotos.length !== especies.length) {
-            cleanUploads(files);
-            return res.status(400).json({
-                success: false,
-                message: 'Todas as fotos de árvores devem ter uma espécie associada',
-                code: 'MISSING_TREE_SPECIES'
-            });
-        }
-
-        // Criação do poste com transação
-        const poste = await prisma.$transaction(async (prisma) => {
-            // Preparar dados das fotos
-            const fotosData = files?.map((file, index) => {
-                const fotoData = {
-                    url: `/uploads/${file.filename}`,
-                    tipo: file.tipo,
-                    fotoLatitude: latitude,
-                    fotoLongitude: longitude
-                };
-
-                // Adiciona metadados específicos para árvores
-                if (file.tipo === TIPOS_FOTO.ARVORE) {
-                    fotoData.especieArvore = especies[index];
-                    fotoData.idUnicoArvore = idsUnicos[index] || `arv-${Date.now()}-${index}`;
-
-                    // Sobrescreve coordenadas se específicas
-                    if (coordsArvores[index]) {
-                        const [lat, lng] = JSON.parse(coordsArvores[index]);
-                        fotoData.fotoLatitude = lat;
-                        fotoData.fotoLongitude = lng;
-                    }
-                }
-
-                return fotoData;
-            });
-
-            return await prisma.postes.create({
-                data: {
-                    numeroIdentificacao: body.numeroIdentificacao,
-                    latitude: latitude,
-                    longitude: longitude,
-                    cidade: body.cidade,
-                    endereco: body.endereco,
-                    numero: body.numero,
-                    cep: body.cep,
-                    isLastPost: body.isLastPost === 'true',
-                    canteiroCentral: body.canteiroCentral === 'true',
-                    usuarioId: body.usuarioId,
-                    emFrente: body.emFrente,
-                    localizacao: body.localizacao,
-                    transformador: body.transformador,
-                    medicao: body.medicao,
-                    telecom: body.telecom,
-                    distanciaEntrePostes: body.distanciaEntrePostes,
-                    concentrador: body.concentrador,
-                    poste: body.poste,
-                    alturaposte: body.alturaposte ? parseFloat(body.alturaposte) : null,
-                    estruturaposte: body.estruturaposte,
-                    tipoBraco: body.tipoBraco,
-                    tamanhoBraco: body.tamanhoBraco ? parseFloat(body.tamanhoBraco) : null,
-                    quantidadePontos: body.quantidadePontos ? parseInt(body.quantidadePontos) : null,
-                    tipoLampada: body.tipoLampada,
-                    potenciaLampada: body.potenciaLampada ? parseInt(body.potenciaLampada) : null,
-                    tipoReator: body.tipoReator,
-                    tipoComando: body.tipoComando,
-                    tipoRede: body.tipoRede,
-                    tipoCabo: body.tipoCabo,
-                    numeroFases: body.numeroFases,
-                    tipoVia: body.tipoVia,
-                    hierarquiaVia: body.hierarquiaVia,
-                    tipoPavimento: body.tipoPavimento,
-                    quantidadeFaixas: body.quantidadeFaixas ? parseInt(body.quantidadeFaixas) : null,
-                    tipoPasseio: body.tipoPasseio,
-                    finalidadeInstalacao: body.finalidadeInstalacao,
-                    especieArvore: body.especieArvore, // Espécie geral (se aplicável)
-                    fotos: {
-                        create: fotosData
-                    }
-                },
-                include: {
-                    fotos: true
-                }
-            });
-        });
-
-        res.status(201).json({
-            success: true,
-            data: poste
-        });
-
-    } catch (error) {
-        cleanUploads(req.files);
-
-        console.error('Erro ao criar poste:', {
-            message: error.message,
-            stack: error.stack,
-            body: req.body
-        });
-
-        if (error.code === 'P2002' && error.meta?.target?.includes('numeroIdentificacao')) {
-            return res.status(400).json({
-                success: false,
-                message: 'Número do poste já existe no sistema',
-                code: 'DUPLICATE_POST_NUMBER'
-            });
-        }
-
-        res.status(500).json({
-            success: false,
-            message: 'Erro interno no servidor',
-            code: 'INTERNAL_SERVER_ERROR',
-            details: process.env.NODE_ENV === 'development' ? {
-                error: error.message,
-                stack: error.stack
-            } : undefined
-        });
-    }
-});*/
-
+// --- Rota para Listar Postes --- 
 router.get('/listar-postes', async (req, res) => {
     console.log('Iniciando listagem de postes');
     try {
         const { page = 1, limit = 1000 } = req.query;
+        const skip = (parseInt(page) - 1) * parseInt(limit);
+        const take = parseInt(limit);
 
-        // 1. Busca os postes com tratamento para campos não-nulos
         const postes = await prisma.postes.findMany({
             where: {
                 latitude: { not: null },
@@ -381,27 +95,40 @@ router.get('/listar-postes', async (req, res) => {
                 longitude: true,
                 endereco: true,
                 cidade: true
-                // Removido createdAt pois não existe no seu modelo
+                // Adicione outros campos se necessário para o frontend
             },
-            // Removido orderBy: { createdAt: 'desc' } pois o campo não existe
-            skip: (page - 1) * limit,
-            take: Number(limit)
+            orderBy: {
+                // Ordenar por ID ou outro campo, já que createdAt não existe no seu modelo
+                id: 'desc'
+            },
+            skip: skip,
+            take: take
         });
 
-        // 2. Formatação dos dados
         const postesFormatados = postes.map(poste => ({
             id: poste.id,
             numeroIdentificacao: poste.numeroIdentificacao,
-            endereco: poste.endereco,
-            cidade: poste.cidade,
+            endereco: `${poste.endereco || ''}, ${poste.cidade || ''}`.trim().replace(/^,|,$/g, ''), // Combina endereço e cidade
             coords: [poste.latitude, poste.longitude]
-            // Removido createdAt
         }));
+
+        // Opcional: Contar o total para paginação
+        const totalPostes = await prisma.postes.count({
+            where: {
+                latitude: { not: null },
+                longitude: { not: null }
+            }
+        });
 
         res.json({
             success: true,
             data: postesFormatados,
-            count: postesFormatados.length
+            pagination: {
+                currentPage: parseInt(page),
+                totalPages: Math.ceil(totalPostes / take),
+                totalItems: totalPostes,
+                itemsPerPage: take
+            }
         });
 
     } catch (error) {
@@ -410,176 +137,123 @@ router.get('/listar-postes', async (req, res) => {
             stack: error.stack,
             prismaError: error.code,
         });
-
         res.status(500).json({
             success: false,
             message: 'Erro ao listar postes',
             details: process.env.NODE_ENV === 'development' ? error.message : 'Erro interno',
-            code: error.code
+            code: 'LIST_POSTES_ERROR'
         });
     }
 });
 
+// --- Rota para Contar Postes --- 
 router.get('/count-postes', async (req, res) => {
     console.log('Contagem de postes solicitada');
     try {
-        // Conta apenas postes com coordenadas válidas
         const count = await prisma.postes.count({
             where: {
                 latitude: { not: null },
                 longitude: { not: null }
             }
         });
-
-        res.json({
-            success: true,
-            count: count
-        });
-
+        res.json({ success: true, count: count });
     } catch (error) {
-        console.error('Erro ao contar postes:', {
-            message: error.message,
-            stack: error.stack,
-            prismaError: error.code,
-        });
-
+        console.error('Erro ao contar postes:', error);
         res.status(500).json({
             success: false,
             message: 'Erro ao contar postes',
             details: process.env.NODE_ENV === 'development' ? error.message : 'Erro interno',
-            code: error.code
+            code: 'COUNT_POSTES_ERROR'
         });
     }
 });
 
-router.post('/postes', handleUpload({ maxFiles: 10 }), async (req, res) => {
+// --- Rota para Criar Poste (com Armazenamento Local) --- 
+router.post("/postes", handleUpload({ maxFiles: 10 }), async (req, res) => {
+    console.log("Recebida requisição POST /api/postes (armazenamento local)");
+    console.log("Body:", req.body);
+    console.log("Files:", req.files ? `${req.files.length} arquivos recebidos` : "Nenhum arquivo recebido");
+
     try {
         const { body, files } = req;
 
-        // 1. Validação dos campos obrigatórios
-        const requiredFields = ['cidade', 'endereco', 'numero', 'usuarioId', 'numeroIdentificacao'];
+        // 1. Validações (mantidas como antes)
+        const requiredFields = ["cidade", "endereco", "numero", "usuarioId", "numeroIdentificacao", "coords"];
         const missingFields = requiredFields.filter(field => !body[field]);
-
         if (missingFields.length > 0) {
-            cleanUploads(files);
-            return res.status(400).json({
-                success: false,
-                message: `Campos obrigatórios faltando: ${missingFields.join(', ')}`,
-                code: 'MISSING_REQUIRED_FIELDS'
-            });
+            console.warn("Campos obrigatórios faltando:", missingFields);
+            if (files) await cleanUploads(files);
+            return res.status(400).json({ success: false, message: `Campos obrigatórios faltando: ${missingFields.join(", ")}`, code: "MISSING_REQUIRED_FIELDS" });
         }
-
-        // 2. Validação do formato do numeroIdentificacao
         if (!/^\d{5}-\d{1}$/.test(body.numeroIdentificacao)) {
-            cleanUploads(files);
-            return res.status(400).json({
-                success: false,
-                message: 'Formato do número do poste inválido. Deve ser XXXXX-X (5 dígitos, traço, 1 dígito)',
-                code: 'INVALID_POST_NUMBER_FORMAT'
-            });
+            console.warn("Formato inválido para numeroIdentificacao:", body.numeroIdentificacao);
+            if (files) await cleanUploads(files);
+            return res.status(400).json({ success: false, message: "Formato do número do poste inválido. Use: XXXXX-X", code: "INVALID_POST_NUMBER_FORMAT" });
         }
-
-        // 3. Validação das coordenadas
         let latitude, longitude;
         try {
-            const coords = body.coords ? JSON.parse(body.coords) : [null, null];
-            latitude = parseFloat(coords[0]);
-            longitude = parseFloat(coords[1]);
-
-            if (isNaN(latitude) || isNaN(longitude) ||
-                latitude < -90 || latitude > 90 ||
-                longitude < -180 || longitude > 180) {
-                throw new Error('Valores inválidos');
-            }
+            const coordsParsed = JSON.parse(body.coords);
+            if (!Array.isArray(coordsParsed) || coordsParsed.length !== 2) throw new Error("Formato inválido.");
+            latitude = parseFloat(coordsParsed[0]);
+            longitude = parseFloat(coordsParsed[1]);
+            if (isNaN(latitude) || isNaN(longitude) || latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) throw new Error("Valores fora da faixa.");
         } catch (error) {
-            cleanUploads(files);
-            return res.status(400).json({
-                success: false,
-                message: 'Coordenadas inválidas. Formato esperado: [latitude, longitude] com valores numéricos',
-                code: 'INVALID_COORDINATES'
-            });
+            console.warn("Erro ao validar coordenadas principais:", body.coords, error.message);
+            if (files) await cleanUploads(files);
+            return res.status(400).json({ success: false, message: `Coordenadas inválidas: ${error.message}`, code: "INVALID_COORDINATES" });
         }
-
-        // Tipos de foto e validações
-        const TIPOS_FOTO = {
-            PANORAMICA: 'PANORAMICA',
-            LUMINARIA: 'LUMINARIA',
-            ARVORE: 'ARVORE',
-            TELECOM: 'TELECOM',
-            LAMPADA: 'LAMPADA',
-            OUTRO: 'OUTRO'
-        };
-
-        // Verificação de fotos obrigatórias
+        const TIPOS_FOTO = { PANORAMICA: "PANORAMICA", LUMINARIA: "LUMINARIA", ARVORE: "ARVORE" };
         const requiredPhotos = [TIPOS_FOTO.PANORAMICA, TIPOS_FOTO.LUMINARIA];
         const uploadedPhotoTypes = files?.map(f => f.tipo) || [];
-
-        const missingRequiredPhotos = requiredPhotos.filter(
-            requiredType => !uploadedPhotoTypes.includes(requiredType)
-        );
-
+        const missingRequiredPhotos = requiredPhotos.filter(type => !uploadedPhotoTypes.includes(type));
         if (missingRequiredPhotos.length > 0) {
-            cleanUploads(files);
-            return res.status(400).json({
-                success: false,
-                message: `Fotos obrigatórias faltando: ${missingRequiredPhotos.join(', ')}`,
-                code: 'MISSING_REQUIRED_PHOTOS'
-            });
+            console.warn("Fotos obrigatórias faltando:", missingRequiredPhotos);
+            if (files) await cleanUploads(files);
+            return res.status(400).json({ success: false, message: `Fotos obrigatórias faltando: ${missingRequiredPhotos.join(", ")}`, code: "MISSING_REQUIRED_PHOTOS" });
         }
-
-        // Processamento de metadados
-        const processArrayField = (field) => {
-            if (!field) return [];
-            return Array.isArray(field) ? field : [field];
-        };
-
+        const processArrayField = (field) => field ? (Array.isArray(field) ? field : [field]) : [];
         const especies = processArrayField(body.especies);
-        const coordsArvores = processArrayField(body.coordsArvore);
-
-        // Validação específica para fotos de árvores
-        const treePhotos = files?.filter(f => f.tipo === TIPOS_FOTO.ARVORE) || [];
-
-        if (treePhotos.length > 0) {
-            if (treePhotos.length !== especies.length) {
-                cleanUploads(files);
-                return res.status(400).json({
-                    success: false,
-                    message: 'Todas as fotos de árvores devem ter uma espécie associada',
-                    code: 'MISSING_TREE_SPECIES'
-                });
-            }
-
+        const latitudesFotos = processArrayField(body.latitudes);
+        const longitudesFotos = processArrayField(body.longitudes);
+        const treePhotosIndices = files?.map((f, idx) => f.tipo === TIPOS_FOTO.ARVORE ? idx : -1).filter(idx => idx !== -1) || [];
+        if (treePhotosIndices.length > 0 && treePhotosIndices.length !== especies.length) {
+            console.warn("Inconsistência entre fotos de árvore e espécies:", { treePhotosCount: treePhotosIndices.length, especiesCount: especies.length });
+            if (files) await cleanUploads(files);
+            return res.status(400).json({ success: false, message: "Número de espécies não corresponde ao número de fotos de árvores.", code: "MISMATCHED_TREE_DATA" });
         }
 
-        // Criação do poste com transação
-        const poste = await prisma.$transaction(async (prisma) => {
-            // Preparar dados das fotos (sem IDs únicos)
-            const fotosData = files?.map((file, index) => {
+        // 2. Criação do poste dentro de uma transação Prisma
+        console.log("Iniciando transação Prisma para criar poste (armazenamento local)...");
+        const poste = await prisma.$transaction(async (tx) => {
+
+            // 2.1 Prepara os dados das fotos para salvar no DB
+            const fotosParaCriar = files.map((file, index) => {
+                console.log(`Preparando dados da foto local: ${file.filename}`);
                 const fotoData = {
-                    url: `/uploads/${file.filename}`,
+                    url: file.relativePath, // Salva o caminho relativo
                     tipo: file.tipo,
-                    fotoLatitude: latitude, // Coordenadas padrão do poste
-                    fotoLongitude: longitude
+                    fotoLatitude: latitudesFotos[index] ? parseFloat(latitudesFotos[index]) : latitude,
+                    fotoLongitude: longitudesFotos[index] ? parseFloat(longitudesFotos[index]) : longitude,
+
                 };
-
-                // Adiciona metadados específicos para árvores
                 if (file.tipo === TIPOS_FOTO.ARVORE) {
-                    fotoData.especieArvore = especies[index];
-
-                    // Sobrescreve coordenadas se específicas
-                    if (coordsArvores[index]) {
-                        const [lat, lng] = JSON.parse(coordsArvores[index]);
-                        fotoData.fotoLatitude = lat;
-                        fotoData.fotoLongitude = lng;
-                    }
+                    const especieIndex = treePhotosIndices.indexOf(index);
+                    if (especieIndex !== -1) fotoData.especieArvore = especies[especieIndex];
                 }
-
+                if (isNaN(fotoData.fotoLatitude) || isNaN(fotoData.fotoLongitude) || fotoData.fotoLatitude < -90 || fotoData.fotoLatitude > 90 || fotoData.fotoLongitude < -180 || fotoData.fotoLongitude > 180) {
+                    console.warn(`Coordenadas inválidas para a foto ${file.filename}. Usando coordenadas do poste.`);
+                    fotoData.fotoLatitude = latitude;
+                    fotoData.fotoLongitude = longitude;
+                }
                 return fotoData;
             });
+            console.log("Dados das fotos (locais) preparados para criação no DB:", fotosParaCriar);
 
-
-            return await prisma.postes.create({
+            // 2.2 Cria o registro do poste no banco de dados
+            console.log("Criando registro do poste no banco de dados...");
+            const novoPoste = await tx.postes.create({
                 data: {
+                    // Campos principais e opcionais (mantidos como antes)
                     numeroIdentificacao: body.numeroIdentificacao,
                     latitude: latitude,
                     longitude: longitude,
@@ -587,215 +261,159 @@ router.post('/postes', handleUpload({ maxFiles: 10 }), async (req, res) => {
                     endereco: body.endereco,
                     numero: body.numero,
                     cep: body.cep,
-                    isLastPost: body.isLastPost === 'true',
-                    canteiroCentral: body.canteiroCentral === 'true',
-                    larguraCanteiro: body.larguraCanteiro  ? parseInt(body.larguraCanteiro) : null,
                     usuarioId: body.usuarioId,
-                    emFrente: body.emFrente,
-                    localizacao: body.localizacao,
-                    transformador: body.transformador,
-                    medicao: body.medicao,
-                    telecom: body.telecom,
-                    distanciaEntrePostes: body.distanciaEntrePostes ? parseInt(body.distanciaEntrePostes) : null,
-                    concentrador: body.concentrador,
-                    poste: body.poste,
+                    localizacao: body.localizacao || null,
+                    emFrente: body.emFrente || null,
+                    transformador: body.transformador || null,
+                    medicao: body.medicao || null,
+                    telecom: body.telecom || null,
+                    concentrador: body.concentrador || null,
+                    poste: body.poste || null,
                     alturaposte: body.alturaposte ? parseFloat(body.alturaposte) : null,
-                    estruturaposte: body.estruturaposte,
-                    tipoBraco: body.tipoBraco,
+                    estruturaposte: body.estruturaposte || null,
+                    tipoBraco: body.tipoBraco || null,
                     tamanhoBraco: body.tamanhoBraco ? parseFloat(body.tamanhoBraco) : null,
                     quantidadePontos: body.quantidadePontos ? parseInt(body.quantidadePontos) : null,
-                    tipoLampada: body.tipoLampada,
+                    tipoLampada: body.tipoLampada || null,
                     potenciaLampada: body.potenciaLampada ? parseInt(body.potenciaLampada) : null,
-                    tipoReator: body.tipoReator,
-                    tipoComando: body.tipoComando,
-                    tipoRede: body.tipoRede,
-                    tipoCabo: body.tipoCabo,
-                    numeroFases: body.numeroFases,
-                    tipoVia: body.tipoVia,
-                    hierarquiaVia: body.hierarquiaVia,
-                    tipoPavimento: body.tipoPavimento,
+                    tipoReator: body.tipoReator || null,
+                    tipoComando: body.tipoComando || null,
+                    tipoRede: body.tipoRede || null,
+                    tipoCabo: body.tipoCabo || null,
+                    numeroFases: body.numeroFases || null,
+                    tipoVia: body.tipoVia || null,
+                    hierarquiaVia: body.hierarquiaVia || null,
+                    tipoPavimento: body.tipoPavimento || null,
                     quantidadeFaixas: body.quantidadeFaixas ? parseInt(body.quantidadeFaixas) : null,
-                    tipoPasseio: body.tipoPasseio,
-                    finalidadeInstalacao: body.finalidadeInstalacao,
-                    especieArvore: body.especieArvore,
+                    tipoPasseio: body.tipoPasseio || null,
+                    canteiroCentral: body.canteiroCentral === "true",
+                    larguraCanteiro: body.larguraCanteiro ? parseInt(body.larguraCanteiro) : null,
+                    finalidadeInstalacao: body.finalidadeInstalacao || null,
+                    isLastPost: body.isLastPost === "true",
+                    distanciaEntrePostes: body.distanciaEntrePostes ? parseInt(body.distanciaEntrePostes) : null,
+
                     fotos: {
-                        create: fotosData
+                        create: fotosParaCriar
                     }
                 },
                 include: {
-                    fotos: true
+                    fotos: true // Inclui as fotos criadas na resposta
                 }
             });
-        });
+            console.log("Registro do poste criado com sucesso no DB (local):", novoPoste.id);
+            return novoPoste;
+        }); // Fim da transação Prisma
 
+        console.log("Poste criado com sucesso (local):", poste.id);
         res.status(201).json({
             success: true,
+            message: "Poste cadastrado com sucesso (armazenamento local)!",
             data: poste
         });
 
     } catch (error) {
-        cleanUploads(req.files);
+        console.error("--- ERRO AO CRIAR POSTE (LOCAL) ---");
+        console.error("Timestamp:", new Date().toISOString());
+        console.error("Mensagem:", error.message);
+        console.error("Código Prisma:", error.code);
+        console.error("Meta Prisma:", error.meta);
+        console.error("Stack Trace:", error.stack);
+        console.error("Request Body:", req.body);
+        console.error("Request Files:", req.files?.map(f => ({ name: f.filename, type: f.tipo, size: f.size, path: f.path })));
 
-        console.error('Erro ao criar poste:', {
-            message: error.message,
-            stack: error.stack,
-            body: req.body
-        });
-
-        if (error.code === 'P2002') {
-            if (error.meta?.target?.includes('numeroIdentificacao')) {
-                return res.status(400).json({
-                    success: false,
-                    message: 'Número do poste já existe no sistema',
-                    code: 'DUPLICATE_POST_NUMBER'
-                });
-            }
-            if (error.meta?.target?.includes('Foto_idUnicoArvore_key')) {
-                return res.status(400).json({
-                    success: false,
-                    message: 'ID de árvore já existe no sistema',
-                    code: 'DUPLICATE_TREE_ID'
-                });
-            }
+        // Limpeza dos arquivos locais é crucial em caso de erro
+        if (req.files) {
+            console.log("Iniciando limpeza de arquivos locais devido a erro...");
+            await cleanUploads(req.files).catch(cleanErr => {
+                console.error("Erro durante a limpeza dos arquivos locais:", cleanErr);
+            });
         }
 
-        res.status(500).json({
+        // Tratamento de erros específicos
+        if (error.code === "P2002") {
+            const target = error.meta?.target;
+            let userMessage = "Erro de duplicidade ao salvar os dados.";
+            if (target && typeof target === "string" && target.includes("numeroIdentificacao")) {
+                userMessage = "Este número de identificação do poste já existe no sistema.";
+            } else if (target && Array.isArray(target) && target.includes("numeroIdentificacao")) {
+                userMessage = "Este número de identificação do poste já existe no sistema.";
+            }
+            // Retorna o erro 400 específico para duplicidade
+            return res.status(400).json({ success: false, message: userMessage, code: "DUPLICATE_ENTRY" });
+        } // <--- Fim do if (error.code === "P2002")
+
+        // Erro genérico (fallback se não for P2002 ou outro erro tratado)
+        console.error("--- ERRO DETALHADO ---");
+        console.error("Tipo:", typeof error);
+        console.error("Propriedades:", Object.getOwnPropertyNames(error));
+        console.error("Mensagem completa:", error);
+
+        res.status(500).json({ 
             success: false,
-            message: 'Erro interno no servidor',
-            code: 'INTERNAL_SERVER_ERROR',
-            details: process.env.NODE_ENV === 'development' ? {
+            message: "Erro interno no servidor ao processar o cadastro.",
+            code: "INTERNAL_SERVER_ERROR",
+            details: process.env.NODE_ENV === "development" ? {
                 error: error.message,
                 stack: error.stack
             } : undefined
         });
-    }
-});
+        // Não precisa de 'return' aqui, pois é a última instrução do catch
 
-router.put('/postes/:id/localizacao', async (req, res) => {
-    console.log('Iniciando atualização de localização:', req.params.id, req.body);
-    
+    } // <--- Fim do bloco catch
+}); // <--- Fim da definição da rota router.post('/postes', ...)
+
+// --- Rota para Atualizar Localização do Poste --- 
+router.patch('/postes/:id/location', async (req, res) => {
+    const { id } = req.params;
+    const { latitude, longitude } = req.body;
+    console.log(`Recebida requisição PATCH /api/postes/${id}/location`);
+    console.log('Body:', req.body);
+
     try {
-        const { id } = req.params;
-        const { latitude, longitude } = req.body;
-
-        // Validação mais robusta
+        // Validação básica
         if (latitude === undefined || longitude === undefined) {
-            console.log('Campos faltando:', { latitude, longitude });
-            return res.status(400).json({
-                success: false,
-                message: 'Latitude e longitude são obrigatórias',
-                code: 'MISSING_COORDINATES'
-            });
+            return res.status(400).json({ success: false, message: 'Latitude e longitude são obrigatórias.', code: 'MISSING_COORDINATES' });
         }
 
-        // Converter para números
-        const lat = Number(latitude);
-        const lng = Number(longitude);
-        
-        console.log('Coordenadas convertidas:', { lat, lng });
+        const lat = parseFloat(latitude);
+        const lng = parseFloat(longitude);
 
-        // Validação numérica mais segura
-        if (typeof lat !== 'number' || typeof lng !== 'number' || isNaN(lat) || isNaN(lng)) {
-            console.log('Coordenadas inválidas:', { lat, lng });
-            return res.status(400).json({
-                success: false,
-                message: 'Latitude e longitude devem ser valores numéricos válidos',
-                code: 'INVALID_COORDINATES_FORMAT'
-            });
+        if (isNaN(lat) || isNaN(lng)) {
+            return res.status(400).json({ success: false, message: 'Latitude e longitude devem ser números válidos.', code: 'INVALID_COORDINATES_FORMAT' });
         }
 
-        // Validação de faixa
         if (lat < -90 || lat > 90 || lng < -180 || lng > 180) {
-            console.log('Coordenadas fora da faixa:', { lat, lng });
-            return res.status(400).json({
-                success: false,
-                message: 'Valores de coordenadas inválidos (latitude deve estar entre -90 e 90, longitude entre -180 e 180)',
-                code: 'INVALID_COORDINATES_RANGE'
-            });
+            return res.status(400).json({ success: false, message: 'Valores de coordenadas fora da faixa permitida.', code: 'INVALID_COORDINATES_RANGE' });
         }
 
-        // Verificar se o poste existe antes de atualizar
-        const posteExistente = await prisma.postes.findUnique({
-            where: { id }
-        });
-
+        const posteExistente = await prisma.postes.findUnique({ where: { id } });
         if (!posteExistente) {
-            console.log('Poste não encontrado:', id);
-            return res.status(404).json({
-                success: false,
-                message: 'Poste não encontrado',
-                code: 'POST_NOT_FOUND'
-            });
+            return res.status(404).json({ success: false, message: 'Poste não encontrado.', code: 'POST_NOT_FOUND' });
         }
 
-        console.log('Atualizando poste:', id, 'com coordenadas:', lat, lng);
-        
-        // Atualização no banco de dados
         const posteAtualizado = await prisma.postes.update({
             where: { id },
-            data: {
-                latitude: lat,
-                longitude: lng,
-               
-            },
-            select: {
-                id: true,
-                numeroIdentificacao: true,
-                latitude: true,
-                longitude: true,
-                endereco: true,
-                cidade: true
-            }
+            data: { latitude: lat, longitude: lng },
+            select: { id: true, numeroIdentificacao: true, latitude: true, longitude: true, endereco: true, cidade: true }
         });
 
-        console.log('Poste atualizado com sucesso:', posteAtualizado);
-        
-        return res.json({
-            success: true,
-            message: 'Localização atualizada com sucesso',
-            data: posteAtualizado
-        });
+        console.log(`Localização do poste ${id} atualizada com sucesso.`);
+        res.json({ success: true, message: 'Localização atualizada com sucesso', data: posteAtualizado });
 
     } catch (error) {
-        console.error('Erro detalhado:', {
-            message: error.message,
-            stack: error.stack,
-            code: error.code,
-            meta: error.meta
-        });
-        
-        // Tratamento específico para erros do Prisma
-        if (error.code === 'P2025') {
-            return res.status(404).json({
-                success: false,
-                message: 'Poste não encontrado',
-                code: 'POST_NOT_FOUND'
-            });
+        console.error(`Erro ao atualizar localização do poste ${id}:`, error);
+        if (error.code === 'P2025') { // Erro específico do Prisma para registro não encontrado na atualização
+            return res.status(404).json({ success: false, message: 'Poste não encontrado.', code: 'POST_NOT_FOUND' });
         }
-
-        // Tratamento para erros de conexão com o banco
-        if (error.code === 'P1001') {
-            return res.status(503).json({
-                success: false,
-                message: 'Serviço de banco de dados indisponível',
-                code: 'DATABASE_UNAVAILABLE'
-            });
-        }
-
-        return res.status(500).json({
+        res.status(500).json({
             success: false,
-            message: 'Erro interno no servidor',
-            code: 'INTERNAL_SERVER_ERROR',
-            details: process.env.NODE_ENV === 'development' ? {
-                error: error.message,
-                stack: error.stack
-            } : undefined
+            message: 'Erro interno no servidor ao atualizar localização.',
+            code: 'UPDATE_LOCATION_ERROR',
+            details: process.env.NODE_ENV === 'development' ? error.message : undefined
         });
     }
 });
 
 
-
-
-export default router
+export default router;
 

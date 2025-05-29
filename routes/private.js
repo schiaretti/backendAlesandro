@@ -466,6 +466,6 @@ router.get('/relatorios/postes', async (req, res) => {
         });
     }
 });
-
+ 
 
 export default router;
