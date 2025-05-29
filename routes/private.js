@@ -239,7 +239,7 @@ router.delete('/deletar-usuario/:id', auth, verificarAdmin, async (req, res) => 
     }
 });
 
-router.get('/relatorios/postes', async (req, res) => {
+/*router.get('/relatorios/postes', async (req, res) => {
     try {
         const {
             tipoRelatorio = 'estatisticas',
@@ -465,7 +465,172 @@ router.get('/relatorios/postes', async (req, res) => {
             details: process.env.NODE_ENV === 'development' ? error.message : undefined
         });
     }
+});*/
+
+router.get('/relatorios/postes', async (req, res) => {
+    try {
+        const {
+            tipoRelatorio = 'estatisticas',
+            // Filtros básicos
+            endereco, cidade, numero, cep,
+            // Componentes elétricos
+            transformador, concentrador, telecom, medicao,
+            // Iluminação
+            tipoLampada, potenciaLampada,
+            tipoReator, tipoComando,
+            // Características físicas
+            alturaposte,
+            estruturaposte, tipoBraco,
+            tamanhoBraco,
+            quantidadePontos,
+            // Rede elétrica
+            tipoRede, tipoCabo, numeroFases,
+            // Infraestrutura
+            tipoVia, hierarquiaVia, tipoPavimento, quantidadeFaixas,
+            tipoPasseio, canteiroCentral, larguraCanteiro,
+            // Outros
+            finalidadeInstalacao, especieArvore, distanciaEntrePostes
+        } = req.query;
+
+        // Construção do filtro WHERE
+        const where = {};
+
+        // 1. Filtros básicos (texto)
+        if (cidade) where.cidade = cidade;
+        if (endereco) where.endereco = { contains: endereco, mode: 'insensitive' };
+        if (numero) where.numero = numero;
+        if (cep) where.cep = cep;
+
+        // 2. Componentes elétricos (boolean)
+        if (transformador) where.transformador = transformador === "true";
+        if (concentrador) where.concentrador = concentrador === "true";
+        if (telecom) where.telecom = telecom === "true";
+        if (medicao) where.medicao = medicao === "true";
+
+        // 3. Iluminação (valores exatos)
+        if (tipoLampada) where.tipoLampada = tipoLampada;
+        if (potenciaLampada) where.potenciaLampada = Number(potenciaLampada);
+        if (tipoReator) where.tipoReator = tipoReator;
+        if (tipoComando) where.tipoComando = tipoComando;
+
+        // 4. Características físicas (valores exatos)
+        if (alturaposte) where.alturaposte = Number(alturaposte);
+        if (estruturaposte) where.estruturaposte = estruturaposte;
+        if (tipoBraco) where.tipoBraco = tipoBraco;
+        if (tamanhoBraco) where.tamanhoBraco = Number(tamanhoBraco);
+        if (quantidadePontos) where.quantidadePontos = Number(quantidadePontos);
+
+        // 5. Rede elétrica
+        if (tipoRede) where.tipoRede = tipoRede;
+        if (tipoCabo) where.tipoCabo = tipoCabo;
+        if (numeroFases) where.numeroFases = numeroFases;
+
+        // 6. Infraestrutura
+        if (tipoVia) where.tipoVia = tipoVia;
+        if (hierarquiaVia) where.hierarquiaVia = hierarquiaVia;
+        if (tipoPavimento) where.tipoPavimento = tipoPavimento;
+        if (quantidadeFaixas) where.quantidadeFaixas = Number(quantidadeFaixas);
+        if (tipoPasseio) where.tipoPasseio = tipoPasseio;
+        if (canteiroCentral) where.canteiroCentral = canteiroCentral === "true";
+        if (larguraCanteiro) where.larguraCanteiro = Number(larguraCanteiro);
+
+        // 7. Outros
+        if (finalidadeInstalacao) where.finalidadeInstalacao = finalidadeInstalacao;
+        if (especieArvore) where.especieArvore = especieArvore;
+        if (distanciaEntrePostes) where.distanciaEntrePostes = Number(distanciaEntrePostes);
+
+        // Busca os postes com filtros
+        const postes = await prisma.postes.findMany({
+            where,
+            orderBy: { numeroIdentificacao: 'asc' }
+        });
+
+        // Função auxiliar para contar valores brutos
+        const groupCount = (data, field) => {
+            const counts = {};
+            data.forEach(item => {
+                const value = item[field] !== null && item[field] !== undefined 
+                    ? item[field] 
+                    : 'Não informado';
+                counts[value] = (counts[value] || 0) + 1;
+            });
+            return Object.entries(counts).map(([valor, quantidade]) => ({
+                valor,
+                quantidade
+            }));
+        };
+
+        // Função auxiliar para calcular média
+        const calcularMedia = (campo) => {
+            const valores = postes
+                .filter(p => p[campo] !== null && p[campo] !== undefined)
+                .map(p => Number(p[campo]));
+            return valores.length > 0 
+                ? (valores.reduce((a, b) => a + b, 0) / valores.length).toFixed(2)
+                : null;
+        };
+
+        // Estatísticas com valores brutos
+        const estatisticas = {
+            total: postes.length,
+            componentes: {
+                transformador: postes.filter(p => p.transformador).length,
+                concentrador: postes.filter(p => p.concentrador).length,
+                telecom: postes.filter(p => p.telecom).length,
+                medicao: postes.filter(p => p.medicao).length,
+                estrutura: groupCount(postes, 'estruturaposte')
+            },
+            iluminacao: {
+                tiposLampada: groupCount(postes, 'tipoLampada'),
+                potencias: groupCount(postes, 'potenciaLampada'),
+                tiposReator: groupCount(postes, 'tipoReator'),
+                tiposComando: groupCount(postes, 'tipoComando')
+            },
+            estrutura: {
+                alturas: groupCount(postes, 'alturaposte'),
+                tiposBraco: groupCount(postes, 'tipoBraco'),
+                tamanhosBraco: groupCount(postes, 'tamanhoBraco'),
+                quantidadePontos: groupCount(postes, 'quantidadePontos')
+            },
+            redeEletrica: {
+                tiposRede: groupCount(postes, 'tipoRede'),
+                tiposCabo: groupCount(postes, 'tipoCabo'),
+                numeroFases: groupCount(postes, 'numeroFases')
+            },
+            infraestrutura: {
+                tiposVia: groupCount(postes, 'tipoVia'),
+                hierarquiaVias: groupCount(postes, 'hierarquiaVia'),
+                tiposPavimento: groupCount(postes, 'tipoPavimento'),
+                quantidadeFaixas: groupCount(postes, 'quantidadeFaixas'),
+                tiposPasseio: groupCount(postes, 'tipoPasseio'),
+                comCanteiro: postes.filter(p => p.canteiroCentral).length,
+                larguraCanteiroMedia: calcularMedia('larguraCanteiro')
+            },
+            outros: {
+                finalidades: groupCount(postes, 'finalidadeInstalacao'),
+                especiesArvore: groupCount(postes, 'especieArvore'),
+                distanciaMedia: calcularMedia('distanciaEntrePostes'),
+                coordenadas: {
+                    comLatLong: postes.filter(p => p.latitude && p.longitude).length
+                }
+            }
+        };
+
+        res.json({
+            success: true,
+            data: tipoRelatorio === 'detalhado' ? postes : null,
+            estatisticas: tipoRelatorio === 'estatisticas' ? estatisticas : null,
+            filtrosAplicados: req.query
+        });
+
+    } catch (error) {
+        console.error('Erro no relatório:', error);
+        res.status(500).json({ 
+            success: false, 
+            error: "Erro ao gerar relatório",
+            details: process.env.NODE_ENV === 'development' ? error.message : undefined
+        });
+    }
 });
- 
 
 export default router;
