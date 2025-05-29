@@ -6,8 +6,11 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// Configuração do diretório de uploads
+const UPLOAD_DIR = path.join(__dirname, '../uploads');
+
 // Função para limpar uploads
- const cleanUploads = (files) => {
+const cleanUploads = (files) => {
     if (!files?.length) return;
 
     files.forEach(file => {
@@ -22,45 +25,43 @@ const __dirname = path.dirname(__filename);
     });
 };
 
+// Configuração de armazenamento
 const storage = multer.diskStorage({
     destination: (req, file, cb) => {
-        const uploadDir = path.join(__dirname, '../uploads');
-        fs.mkdirSync(uploadDir, { recursive: true });
-        cb(null, uploadDir);
+        fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+        cb(null, UPLOAD_DIR);
     },
     filename: (req, file, cb) => {
-        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+        const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1E9)}`;
         const ext = path.extname(file.originalname);
-        cb(null, `foto_${uniqueSuffix}${ext}`);
+        cb(null, `poste_${uniqueSuffix}${ext}`);
     }
 });
 
+// Filtro de arquivos
 const fileFilter = (req, file, cb) => {
-    const allowedTypes = /jpeg|jpg|png/i;
-    const extname = allowedTypes.test(path.extname(file.originalname));
-    const mimetype = allowedTypes.test(file.mimetype);
-
-    if (extname && mimetype) {
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/jpg'];
+    if (allowedTypes.includes(file.mimetype)) {
         cb(null, true);
     } else {
         cb(new Error('Apenas imagens (JPEG/JPG/PNG) são permitidas'), false);
     }
 };
 
-
- const handleUpload = (options = {}) => {
-    const uploader = multer({
+// Middleware principal
+const handleUpload = (options = {}) => {
+    const upload = multer({
         storage,
         fileFilter,
         limits: {
-            fileSize: options.fileSize || 5 * 1024 * 1024,
+            fileSize: options.fileSize || 10 * 1024 * 1024, // 10MB padrão
             files: options.maxFiles || 10
         }
     });
 
     return (req, res, next) => {
-        const fieldsMiddleware = (req, res, next) => {
-            // Converte todos os campos relevantes para arrays
+        // Middleware para normalizar campos de array
+        const normalizeFields = (req, res, next) => {
             const arrayFields = ['tipos', 'especies', 'latitudes', 'longitudes'];
             arrayFields.forEach(field => {
                 if (req.body[field] && !Array.isArray(req.body[field])) {
@@ -70,42 +71,53 @@ const fileFilter = (req, file, cb) => {
             next();
         };
 
-        fieldsMiddleware(req, res, () => {
-            uploader.array('fotos')(req, res, (err) => {
+        normalizeFields(req, res, () => {
+            upload.array('fotos')(req, res, async (err) => {
                 if (err) {
                     cleanUploads(req.files);
-                    const errorMap = {
-                        LIMIT_FILE_SIZE: 'Tamanho máximo do arquivo excedido (5MB)',
+                    const errorMessages = {
+                        LIMIT_FILE_SIZE: 'Tamanho máximo do arquivo excedido (10MB)',
                         LIMIT_FILE_COUNT: 'Número máximo de arquivos excedido',
                         'LIMIT_UNEXPECTED_FILE': 'Campo de upload incorreto'
                     };
                     return res.status(400).json({
                         success: false,
-                        message: errorMap[err.code] || 'Erro no upload de arquivos',
+                        message: errorMessages[err.code] || 'Erro no upload de arquivos',
                         code: err.code || 'UPLOAD_ERROR'
                     });
                 }
 
-                // Associação CORRETA dos metadados
-                if (req.files && req.body.tipos) {
-                    req.files.forEach((file, index) => {
-                        file.tipo = req.body.tipos?.[index] || 'OUTRO';
-
-                        if (file.tipo === 'ARVORE') {
-                            // Corrigido para usar 'especies' em vez de 'especieArvore'
-                            file.especieArvore = req.body.especies?.[index]; // <<< Correção aqui
-                            file.fotoLatitude = parseFloat(req.body.latitudes?.[index]) || null;
-                            file.fotoLongitude = parseFloat(req.body.longitudes?.[index]) || null;
-                        }
-                    });
+                // Processamento dos metadados
+                if (req.files?.length && req.body.tipos) {
+                    req.files = req.files.map((file, index) => ({
+                        ...file,
+                        // Adiciona metadados essenciais
+                        tipo: req.body.tipos[index] || 'OUTRO',
+                        path: file.path, // Caminho absoluto
+                        relativePath: `/uploads/${file.filename}`, // Caminho relativo
+                        // Metadados específicos para árvores
+                        ...(req.body.tipos[index] === 'ARVORE' && {
+                            especieArvore: req.body.especies?.[index],
+                            fotoLatitude: parseFloat(req.body.latitudes?.[index]) || null,
+                            fotoLongitude: parseFloat(req.body.longitudes?.[index]) || null
+                        }),
+                        // Coordenadas padrão para outros tipos
+                        ...(req.body.tipos[index] !== 'ARVORE' && {
+                            fotoLatitude: parseFloat(req.body.latitude) || null,
+                            fotoLongitude: parseFloat(req.body.longitude) || null
+                        })
+                    }));
                 }
 
-                console.log('Files processed:', req.files.map(f => ({
+                console.log('Files processed:', req.files?.map(f => ({
                     filename: f.filename,
+                    path: f.path,
                     tipo: f.tipo,
-                    especieArvore: f.especieArvore,
-                    coords: f.fotoLatitude && f.fotoLongitude ?
-                        [f.fotoLatitude, f.fotoLongitude] : null
+                    size: f.size,
+                    ...(f.tipo === 'ARVORE' && {
+                        especie: f.especieArvore,
+                        coords: [f.fotoLatitude, f.fotoLongitude]
+                    })
                 })));
 
                 next();
@@ -114,9 +126,4 @@ const fileFilter = (req, file, cb) => {
     };
 };
 
-export { 
-    handleUpload, 
-    cleanUploads, 
-    storage,
-    fileFilter 
-};
+export { handleUpload, cleanUploads };
