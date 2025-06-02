@@ -239,48 +239,69 @@ router.delete('/deletar-usuario/:id', auth, verificarAdmin, async (req, res) => 
     }
 });
 
+
 router.get('/relatorios/postes', async (req, res) => {
     try {
+        // 1. OBTER TODOS OS PARÂMETROS DA REQUISIÇÃO
         const {
+            // Tipo de relatório e fotos
             tipoRelatorio = 'estatisticas',
+            incluirFotos = 'false',
+            tipoFoto,
+            
             // Filtros básicos
             endereco, cidade, numero, cep, localizacao,
+            
             // Componentes elétricos
             transformador, concentrador, telecom, medicao,
+            
             // Iluminação
             tipoLampada, potenciaMin, potenciaMax, tipoReator, tipoComando,
+            
             // Características físicas
             alturaposteMin, alturaposteMax, estruturaposte, tipoBraco,
             tamanhoBracoMin, tamanhoBracoMax, quantidadePontosMin, quantidadePontosMax,
+            
             // Rede elétrica
             tipoRede, tipoCabo, numeroFases,
+            
             // Infraestrutura
             tipoVia, hierarquiaVia, tipoPavimento, quantidadeFaixasMin, quantidadeFaixasMax,
             tipoPasseio, canteiroCentral, larguraCanteiroMin, larguraCanteiroMax,
+            
             // Outros
             finalidadeInstalacao, especieArvore, distanciaEntrePostesMin, distanciaEntrePostesMax,
+            
             // Paginação
             page = 1,
             per_page = 20
         } = req.query;
 
-        // Construção dinâmica do 'where'
+        // 2. VALIDAÇÃO DO TIPO DE FOTO (se foi fornecido)
+        if (incluirFotos === 'true' && tipoFoto && !['PANORAMICA', 'ARVORE', 'LUMINARIA', 'TELECOM', 'LAMPADA', 'OUTRO'].includes(tipoFoto)) {
+            return res.status(400).json({
+                success: false,
+                error: "Tipo de foto inválido. Valores permitidos: PANORAMICA, ARVORE, LUMINARIA, TELECOM, LAMPADA, OUTRO"
+            });
+        }
+
+        // 3. CONSTRUÇÃO DOS FILTROS (where)
         const where = {};
 
-        // 1. Filtros básicos
+        // Filtros básicos
         if (cidade) where.cidade = cidade;
         if (endereco) where.endereco = { contains: endereco, mode: 'insensitive' };
         if (numero) where.numero = numero;
         if (cep) where.cep = cep;
-        if (localizacao) where.cep = localizacao;
+        if (localizacao) where.localizacao = localizacao;
 
-        // 2. Componentes elétricos
-        if (transformador) where.transformador = transformador === "true" ? "true" : "false";
-        if (medicao) where.medicao = medicao === "true" ? "true" : "false";
-        if (telecom) where.telecom = telecom === "true" ? "true" : "false";
-        if (concentrador) where.concentrador = concentrador === "true" ? "true" : "false";
+        // Componentes elétricos
+        if (transformador) where.transformador = transformador === "true";
+        if (medicao) where.medicao = medicao === "true";
+        if (telecom) where.telecom = telecom === "true";
+        if (concentrador) where.concentrador = concentrador === "true";
 
-        // 3. Iluminação
+        // Iluminação
         if (tipoLampada) where.tipoLampada = tipoLampada;
         if (tipoReator) where.tipoReator = tipoReator;
         if (tipoComando) where.tipoComando = tipoComando;
@@ -291,7 +312,7 @@ router.get('/relatorios/postes', async (req, res) => {
             };
         }
 
-        // 4. Características físicas
+        // Características físicas
         if (estruturaposte) where.estruturaposte = estruturaposte;
         if (tipoBraco) where.tipoBraco = tipoBraco;
         if (alturaposteMin || alturaposteMax) {
@@ -313,12 +334,12 @@ router.get('/relatorios/postes', async (req, res) => {
             };
         }
 
-        // 5. Rede elétrica
+        // Rede elétrica
         if (tipoRede) where.tipoRede = tipoRede;
         if (tipoCabo) where.tipoCabo = tipoCabo;
         if (numeroFases) where.numeroFases = numeroFases;
 
-        // 6. Infraestrutura
+        // Infraestrutura
         if (tipoVia) where.tipoVia = tipoVia;
         if (hierarquiaVia) where.hierarquiaVia = hierarquiaVia;
         if (tipoPavimento) where.tipoPavimento = tipoPavimento;
@@ -337,7 +358,7 @@ router.get('/relatorios/postes', async (req, res) => {
             };
         }
 
-        // 7. Outros
+        // Outros filtros
         if (finalidadeInstalacao) where.finalidadeInstalacao = finalidadeInstalacao;
         if (especieArvore) where.especieArvore = especieArvore;
         if (distanciaEntrePostesMin || distanciaEntrePostesMax) {
@@ -347,8 +368,9 @@ router.get('/relatorios/postes', async (req, res) => {
             };
         }
 
-        // Campos a serem selecionados
+        // 4. CAMPOS A SEREM SELECIONADOS
         const selectFields = {
+            id: true,
             numeroIdentificacao: true,
             cidade: true,
             endereco: true,
@@ -382,104 +404,164 @@ router.get('/relatorios/postes', async (req, res) => {
             larguraCanteiro: true,
             distanciaEntrePostes: true,
             latitude: true,
-            longitude: true
+            longitude: true,
+            isLastPost: true,
+            usuarioId: true,
+            emFrente: true,
+            poste: true
         };
 
-        // Configuração da consulta
+        if (incluirFotos === 'true') {
+            selectFields.fotos = {
+                where: tipoFoto ? { tipo: tipoFoto } : undefined,
+                select: {
+                    id: true,
+                    url: true,
+                    tipo: true,
+                    fotoLatitude: true,
+                    fotoLongitude: true,
+                    especieArvore: true,
+                    createdAt: true
+                },
+                orderBy: { createdAt: 'desc' },
+                take: 4
+            };
+        }
+
+        // 5. CONFIGURAÇÃO DA CONSULTA
         const queryOptions = {
             where,
             select: selectFields,
             orderBy: { numeroIdentificacao: 'asc' }
         };
 
-        // Adiciona paginação apenas para relatórios detalhados
-        if (tipoRelatorio === 'detalhado' || tipoRelatorio === 'por-rua') {
+        // Adiciona paginação para relatórios detalhados ou com fotos
+        if (tipoRelatorio === 'detalhado' || tipoRelatorio === 'por-rua' || incluirFotos === 'true') {
             queryOptions.skip = (page - 1) * per_page;
             queryOptions.take = +per_page;
         }
 
-        // Executa a consulta
+        // 6. EXECUTA A CONSULTA
         const [postes, totalCount] = await Promise.all([
             prisma.postes.findMany(queryOptions),
             prisma.postes.count({ where })
         ]);
 
-        // Funções auxiliares para estatísticas
-        const calcularMedia = (campo) => {
-            const valores = postes.filter(p => p[campo] !== null && p[campo] !== undefined)
-                .map(p => parseFloat(p[campo]));
-            return valores.length > 0 ? (valores.reduce((a, b) => a + b, 0) / valores.length).toFixed(2) : 0;
-        };
+        // 7. PROCESSAMENTO DOS RESULTADOS
+        // Processa fotos se necessário
+        let postesProcessados = postes;
+        if (incluirFotos === 'true') {
+            postesProcessados = postes.map(poste => ({
+                ...poste,
+                fotos: poste.fotos?.map(foto => ({
+                    ...foto,
+                    url: `${process.env.APP_URL || 'https://backendalesandro-production.up.railway.app'}${foto.url}`
+                })) || []
+            }));
+        }
 
+        // 8. GERAR ESTATÍSTICAS (APENAS NÚMEROS ABSOLUTOS)
         const contarPorValor = (campo) => {
             const contagem = {};
             postes.forEach(p => {
                 const valor = p[campo] || 'Não informado';
                 contagem[valor] = (contagem[valor] || 0) + 1;
             });
-            return Object.entries(contagem).map(([valor, count]) => ({ valor, count }));
+            return contagem;
         };
 
-        // Gerar estatísticas
-        const estatisticas = {
-            total: totalCount,
-            componentes: {
-                transformador: await prisma.postes.count({ where: { ...where, transformador: "true" } }),
-                concentrador: await prisma.postes.count({ where: { ...where, concentrador: "true" } }),
-                telecom: await prisma.postes.count({ where: { ...where, telecom: "true" } }),
-                medicao: await prisma.postes.count({ where: { ...where, medicao: "true" } }),
-                tiposPoste: contarPorValor('estruturaposte')
-            },
-            estrutura: {
-                alturaposteMedia: calcularMedia('alturaposte'),
-                tiposBraco: contarPorValor('tipoBraco'),
-                tamanhoBracoMedia: calcularMedia('tamanhoBraco'),
-                pontosLuminicosMedia: calcularMedia('quantidadePontos')
-            },
-            iluminacao: {
-                tiposLampada: contarPorValor('tipoLampada'),
-                potenciaMedia: calcularMedia('potenciaLampada'),
-                tiposReator: contarPorValor('tipoReator'),
-                tiposComando: contarPorValor('tipoComando'),
-                led: postes.filter(p => p.tipoLampada === 'LED').length,
-                vaporSodio70: postes.filter(p => p.tipoLampada === 'Vapor de Sódio' && p.potenciaLampada === 70).length
-            },
-            redeEletrica: {
-                tiposRede: contarPorValor('tipoRede'),
-                tiposCabo: contarPorValor('tipoCabo'),
-                distribuicaoFases: contarPorValor('numeroFases')
-            },
-            infraestrutura: {
-                tiposVia: contarPorValor('tipoVia'),
-                hierarquiaVias: contarPorValor('hierarquiaVia'),
-                tiposPavimento: contarPorValor('tipoPavimento'),
-                faixasMedia: calcularMedia('quantidadeFaixas'),
-                tiposPasseio: contarPorValor('tipoPasseio'),
-                comCanteiro: postes.filter(p => p.canteiroCentral).length,
-                larguraCanteiroMedia: calcularMedia('larguraCanteiro')
-            },
-            outros: {
-                finalidades: contarPorValor('finalidadeInstalacao'),
-                especiesArvore: contarPorValor('especieArvore'),
-                distanciaMedia: calcularMedia('distanciaEntrePostes'),
-                coordenadas: {
-                    comLatLong: postes.filter(p => p.latitude && p.longitude).length
-                }
-            }
+        const contarPorFaixa = (campo, faixas) => {
+            const contagem = {};
+            faixas.forEach(faixa => {
+                contagem[`${faixa.min}-${faixa.max}`] = postes.filter(p => 
+                    p[campo] >= faixa.min && p[campo] <= faixa.max
+                ).length;
+            });
+            return contagem;
         };
 
-        // Resposta final
-        res.json({
+        const contarComponentes = async (componente) => {
+            const count = await prisma.postes.count({ 
+                where: { ...where, [componente]: true } 
+            });
+            return count;
+        };
+
+        // Estatísticas de iluminação
+        const tiposLampadaCount = contarPorValor('tipoLampada');
+        const lampadas70w = postes.filter(p => p.potenciaLampada === 70).length;
+        const lampadas100w = postes.filter(p => p.potenciaLampada === 100).length;
+        const lampadas150w = postes.filter(p => p.potenciaLampada === 150).length;
+
+        // Estatísticas de altura
+        const faixasAltura = [
+            { min: 0, max: 5 },
+            { min: 5, max: 8 },
+            { min: 8, max: 12 },
+            { min: 12, max: 999 }
+        ];
+        const alturaPorFaixa = contarPorFaixa('alturaposte', faixasAltura);
+
+        // 9. RESPOSTA FINAL
+        const response = {
             success: true,
-            data: tipoRelatorio === 'estatisticas' ? null : postes,
-            meta: estatisticas,
+            data: tipoRelatorio === 'estatisticas' ? null : postesProcessados,
+            meta: {
+                total: totalCount,
+                componentes: {
+                    transformador: await contarComponentes('transformador'),
+                    concentrador: await contarComponentes('concentrador'),
+                    telecom: await contarComponentes('telecom'),
+                    medicao: await contarComponentes('medicao'),
+                    tiposPoste: contarPorValor('estruturaposte')
+                },
+                iluminacao: {
+                    tiposLampada: tiposLampadaCount,
+                    lampadas70w,
+                    lampadas100w,
+                    lampadas150w,
+                    tiposReator: contarPorValor('tipoReator'),
+                    tiposComando: contarPorValor('tipoComando')
+                },
+                estrutura: {
+                    alturaPorFaixa,
+                    tiposBraco: contarPorValor('tipoBraco'),
+                    tamanhoBracoMedia: postes.reduce((sum, p) => sum + (p.tamanhoBraco || 0), 0) / postes.length,
+                    quantidadePontosMedia: postes.reduce((sum, p) => sum + (p.quantidadePontos || 0), 0) / postes.length
+                },
+                redeEletrica: {
+                    tiposRede: contarPorValor('tipoRede'),
+                    tiposCabo: contarPorValor('tipoCabo'),
+                    numeroFases: contarPorValor('numeroFases')
+                },
+                infraestrutura: {
+                    tiposVia: contarPorValor('tipoVia'),
+                    hierarquiaVias: contarPorValor('hierarquiaVia'),
+                    tiposPavimento: contarPorValor('tipoPavimento'),
+                    quantidadeFaixasMedia: postes.reduce((sum, p) => sum + (p.quantidadeFaixas || 0), 0) / postes.length,
+                    tiposPasseio: contarPorValor('tipoPasseio'),
+                    comCanteiro: postes.filter(p => p.canteiroCentral).length,
+                    larguraCanteiroMedia: postes.reduce((sum, p) => sum + (p.larguraCanteiro || 0), 0) / postes.length
+                },
+                outros: {
+                    finalidades: contarPorValor('finalidadeInstalacao'),
+                    especiesArvore: contarPorValor('especieArvore'),
+                    distanciaMedia: postes.reduce((sum, p) => sum + (p.distanciaEntrePostes || 0), 0) / postes.length,
+                    comCoordenadas: postes.filter(p => p.latitude && p.longitude).length
+                }
+            },
             pagination: {
                 page: +page,
                 per_page: +per_page,
                 total: totalCount,
                 total_pages: Math.ceil(totalCount / per_page)
             }
-        });
+        };
+
+        // Configura cabeçalho de cache
+        res.set('Cache-Control', 'public, max-age=300');
+
+        res.json(response);
 
     } catch (error) {
         console.error('Erro no relatório:', error);
@@ -491,270 +573,6 @@ router.get('/relatorios/postes', async (req, res) => {
     }
 });
 
-router.get('/relatorios/postes-com-fotos', async (req, res) => {
-    try {
-        // 1. OBTER TODOS OS PARÂMETROS DA REQUISIÇÃO
-        // Parâmetros básicos de localização
-        const {
-            endereco,
-            cidade,
-            numero,
-            cep,
-            localizacao,
-            // Componentes elétricos
-            transformador,
-            concentrador,
-            telecom,
-            medicao,
-            // Iluminação
-            tipoLampada,
-            potenciaMin,
-            potenciaMax,
-            tipoReator,
-            tipoComando,
-            // Características físicas
-            alturaposteMin,
-            alturaposteMax,
-            estruturaposte,
-            tipoBraco,
-            tamanhoBracoMin,
-            tamanhoBracoMax,
-            quantidadePontosMin,
-            quantidadePontosMax,
-            // Rede elétrica
-            tipoRede,
-            tipoCabo,
-            numeroFases,
-            // Infraestrutura
-            tipoVia,
-            hierarquiaVia,
-            tipoPavimento,
-            quantidadeFaixasMin,
-            quantidadeFaixasMax,
-            tipoPasseio,
-            canteiroCentral,
-            larguraCanteiroMin,
-            larguraCanteiroMax,
-            // Outros
-            finalidadeInstalacao,
-            especieArvore,
-            distanciaEntrePostesMin,
-            distanciaEntrePostesMax,
-            // Paginação
-            page = 1,
-            per_page = 20,
-            // Filtro específico para fotos
-            tipoFoto
-        } = req.query;
 
-        // 2. VALIDAÇÃO DO TIPO DE FOTO (se foi fornecido)
-        if (tipoFoto && !['PANORAMICA', 'ARVORE', 'LUMINARIA', 'TELECOM', 'LAMPADA', 'OUTRO'].includes(tipoFoto)) {
-            return res.status(400).json({
-                success: false,
-                error: "Tipo de foto inválido. Os valores permitidos são: PANORAMICA, ARVORE, LUMINARIA, TELECOM, LAMPADA, OUTRO"
-            });
-        }
-
-        // 3. CONSTRUÇÃO DOS FILTROS (where)
-        // Objeto que vai conter todos os filtros
-        const where = {};
-
-        // 3.1 Filtros básicos
-        if (cidade) where.cidade = cidade;
-        if (endereco) where.endereco = { contains: endereco, mode: 'insensitive' };
-        if (numero) where.numero = numero;
-        if (cep) where.cep = cep;
-        if (localizacao) where.localizacao = localizacao;
-
-        // 3.2 Componentes elétricos (convertendo string "true"/"false" para boolean)
-        if (transformador) where.transformador = transformador === "true";
-        if (medicao) where.medicao = medicao === "true";
-        if (telecom) where.telecom = telecom === "true";
-        if (concentrador) where.concentrador = concentrador === "true";
-
-        // 3.3 Iluminação
-        if (tipoLampada) where.tipoLampada = tipoLampada;
-        if (tipoReator) where.tipoReator = tipoReator;
-        if (tipoComando) where.tipoComando = tipoComando;
-
-        // Filtro por faixa de potência
-        if (potenciaMin || potenciaMax) {
-            where.potenciaLampada = {};
-            if (potenciaMin) where.potenciaLampada.gte = Number(potenciaMin);
-            if (potenciaMax) where.potenciaLampada.lte = Number(potenciaMax);
-        }
-
-        // 3.4 Características físicas
-        if (estruturaposte) where.estruturaposte = estruturaposte;
-        if (tipoBraco) where.tipoBraco = tipoBraco;
-
-        // Filtros por faixa de valores
-        if (alturaposteMin || alturaposteMax) {
-            where.alturaposte = {};
-            if (alturaposteMin) where.alturaposte.gte = Number(alturaposteMin);
-            if (alturaposteMax) where.alturaposte.lte = Number(alturaposteMax);
-        }
-
-        if (tamanhoBracoMin || tamanhoBracoMax) {
-            where.tamanhoBraco = {};
-            if (tamanhoBracoMin) where.tamanhoBraco.gte = Number(tamanhoBracoMin);
-            if (tamanhoBracoMax) where.tamanhoBraco.lte = Number(tamanhoBracoMax);
-        }
-
-        if (quantidadePontosMin || quantidadePontosMax) {
-            where.quantidadePontos = {};
-            if (quantidadePontosMin) where.quantidadePontos.gte = Number(quantidadePontosMin);
-            if (quantidadePontosMax) where.quantidadePontos.lte = Number(quantidadePontosMax);
-        }
-
-        // 3.5 Rede elétrica
-        if (tipoRede) where.tipoRede = tipoRede;
-        if (tipoCabo) where.tipoCabo = tipoCabo;
-        if (numeroFases) where.numeroFases = numeroFases;
-
-        // 3.6 Infraestrutura
-        if (tipoVia) where.tipoVia = tipoVia;
-        if (hierarquiaVia) where.hierarquiaVia = hierarquiaVia;
-        if (tipoPavimento) where.tipoPavimento = tipoPavimento;
-        if (tipoPasseio) where.tipoPasseio = tipoPasseio;
-        if (canteiroCentral) where.canteiroCentral = canteiroCentral === "true";
-
-        if (quantidadeFaixasMin || quantidadeFaixasMax) {
-            where.quantidadeFaixas = {};
-            if (quantidadeFaixasMin) where.quantidadeFaixas.gte = Number(quantidadeFaixasMin);
-            if (quantidadeFaixasMax) where.quantidadeFaixas.lte = Number(quantidadeFaixasMax);
-        }
-
-        if (larguraCanteiroMin || larguraCanteiroMax) {
-            where.larguraCanteiro = {};
-            if (larguraCanteiroMin) where.larguraCanteiro.gte = Number(larguraCanteiroMin);
-            if (larguraCanteiroMax) where.larguraCanteiro.lte = Number(larguraCanteiroMax);
-        }
-
-        // 3.7 Outros filtros
-        if (finalidadeInstalacao) where.finalidadeInstalacao = finalidadeInstalacao;
-        if (especieArvore) where.especieArvore = especieArvore;
-
-        if (distanciaEntrePostesMin || distanciaEntrePostesMax) {
-            where.distanciaEntrePostes = {};
-            if (distanciaEntrePostesMin) where.distanciaEntrePostes.gte = Number(distanciaEntrePostesMin);
-            if (distanciaEntrePostesMax) where.distanciaEntrePostes.lte = Number(distanciaEntrePostesMax);
-        }
-
-        // 4. CONSULTA AO BANCO DE DADOS (PARALELA)
-        // Executa a busca dos postes e a contagem total ao mesmo tempo
-        const [postes, totalCount] = await Promise.all([
-            // Consulta para obter os postes
-            prisma.postes.findMany({
-                where, // Aplica todos os filtros
-                select: { // Seleciona apenas os campos necessários
-                    id: true,
-                    numeroIdentificacao: true,
-                    latitude: true,
-                    longitude: true,
-                    cidade: true,
-                    endereco: true,
-                    numero: true,
-                    cep: true,
-                    isLastPost: true,
-                    canteiroCentral: true,
-                    larguraCanteiro: true,
-                    usuarioId: true,
-                    emFrente: true,
-                    localizacao: true,
-                    transformador: true,
-                    medicao: true,
-                    telecom: true,
-                    distanciaEntrePostes: true,
-                    concentrador: true,
-                    poste: true,
-                    alturaposte: true,
-                    estruturaposte: true,
-                    tipoBraco: true,
-                    tamanhoBraco: true,
-                    quantidadePontos: true,
-                    tipoLampada: true,
-                    potenciaLampada: true,
-                    tipoReator: true,
-                    tipoComando: true,
-                    tipoRede: true,
-                    tipoCabo: true,
-                    numeroFases: true,
-                    tipoVia: true,
-                    hierarquiaVia: true,
-                    tipoPavimento: true,
-                    quantidadeFaixas: true,
-                    tipoPasseio: true,
-                    finalidadeInstalacao: true,
-                    especieArvore: true,
-
-                    // Adicione aqui outros campos que você precisa no relatório
-                    fotos: {
-                        where: tipoFoto ? { tipo: tipoFoto } : undefined, // Filtra por tipo de foto se fornecido
-                        select: {
-                            id: true,
-                            url: true,
-                            tipo: true,
-                            fotoLatitude: true,
-                            fotoLongitude: true,
-                            especieArvore: true,
-                            createdAt: true
-                        },
-                        orderBy: { createdAt: 'desc' }, // Ordena fotos pelas mais recentes
-                        take: 4 // Limita a 4 fotos por poste (ajuste conforme necessário)
-                    }
-                },
-                skip: (page - 1) * per_page, // Calcula a paginação
-                take: +per_page,
-                orderBy: { numeroIdentificacao: 'asc' } // Ordena por número de identificação
-            }),
-
-            // Consulta para contar o total de postes (com os mesmos filtros)
-            prisma.postes.count({ where })
-        ]);
-
-        // 5. PROCESSAMENTO DOS RESULTADOS
-        // Converte as URLs relativas das fotos para URLs absolutas
-        const postesProcessados = postes.map(poste => ({
-            ...poste,
-            fotos: poste.fotos.map(foto => ({
-                ...foto,
-                url: `${process.env.APP_URL || 'https://backendalesandro-production.up.railway.app'}${foto.url}`
-            }))
-        }));
-
-        // 6. RESPOSTA DA API
-        // Configura cabeçalho de cache (5 minutos)
-        res.set('Cache-Control', 'public, max-age=300');
-
-        // Retorna os dados formatados
-        res.json({
-            success: true,
-            data: postesProcessados,
-            meta: {
-                total: totalCount,
-                page: +page,
-                per_page: +per_page,
-                total_pages: Math.ceil(totalCount / per_page)
-            }
-        });
-
-    } catch (error) {
-        // 7. TRATAMENTO DE ERROS
-        console.error('Erro no relatório com fotos:', error);
-
-        // Em desenvolvimento, mostra mais detalhes do erro
-        const errorDetails = process.env.NODE_ENV === 'development' ? {
-            message: error.message,
-            stack: error.stack
-        } : undefined;
-
-        res.status(500).json({
-            success: false,
-            error: "Erro ao gerar relatório com fotos",
-            details: errorDetails
-        });
-    }
-});
 
 export default router;
