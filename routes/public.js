@@ -75,6 +75,23 @@ router.post('/login', async (req, res) => {
     }
 });
 
+// --- Rota para Contar Usuários ---
+router.get('/count-usuarios', async (req, res) => {
+    console.log('Contagem de usuários solicitada');
+    try {
+        const count = await prisma.usuarios.count(); // Ou o nome do seu modelo de usuários
+        res.json({ success: true, count: count });
+    } catch (error) {
+        console.error('Erro ao contar usuários:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Erro ao contar usuários',
+            details: process.env.NODE_ENV === 'development' ? error.message : 'Erro interno',
+            code: 'COUNT_USUARIOS_ERROR'
+        });
+    }
+});
+
 // --- Rota para Listar Postes --- 
 router.get('/listar-postes', async (req, res) => {
     console.log('Iniciando listagem de postes');
@@ -99,7 +116,7 @@ router.get('/listar-postes', async (req, res) => {
             },
             orderBy: {
                 // Ordenar por ID ou outro campo, já que createdAt não existe no seu modelo
-                id: 'desc' 
+                id: 'desc'
             },
             skip: skip,
             take: take
@@ -114,7 +131,7 @@ router.get('/listar-postes', async (req, res) => {
 
         // Opcional: Contar o total para paginação
         const totalPostes = await prisma.postes.count({
-             where: {
+            where: {
                 latitude: { not: null },
                 longitude: { not: null }
             }
@@ -222,7 +239,7 @@ router.post('/postes', handleUpload({ maxFiles: 10 }), async (req, res) => {
             if (files) await cleanUploads(files);
             return res.status(400).json({
                 success: false,
-                message: `Coordenadas inválidas: ${error.message}. Formato esperado: string JSON '[latitude, longitude]' com valores numéricos válidos.`, 
+                message: `Coordenadas inválidas: ${error.message}. Formato esperado: string JSON '[latitude, longitude]' com valores numéricos válidos.`,
                 code: 'INVALID_COORDINATES'
             });
         }
@@ -267,7 +284,7 @@ router.post('/postes', handleUpload({ maxFiles: 10 }), async (req, res) => {
         // 7. Criação do poste dentro de uma transação Prisma
         console.log('Iniciando transação Prisma para criar poste...');
         const poste = await prisma.$transaction(async (tx) => {
-            
+
             // 7.1 Upload das fotos para S3 em paralelo
             console.log(`Iniciando upload de ${files.length} fotos para S3...`);
             const fotosParaCriar = await Promise.all(files.map(async (file, index) => {
@@ -296,12 +313,12 @@ router.post('/postes', handleUpload({ maxFiles: 10 }), async (req, res) => {
                     if (especieIndex !== -1) {
                         fotoData.especieArvore = especies[especieIndex];
                     } else {
-                         console.warn(`Foto ${file.filename} marcada como ARVORE mas sem espécie correspondente no índice ${index}`);
+                        console.warn(`Foto ${file.filename} marcada como ARVORE mas sem espécie correspondente no índice ${index}`);
                     }
                 }
-                
+
                 // Valida coordenadas da foto individualmente
-                 if (isNaN(fotoData.fotoLatitude) || isNaN(fotoData.fotoLongitude) || fotoData.fotoLatitude < -90 || fotoData.fotoLatitude > 90 || fotoData.fotoLongitude < -180 || fotoData.fotoLongitude > 180) {
+                if (isNaN(fotoData.fotoLatitude) || isNaN(fotoData.fotoLongitude) || fotoData.fotoLatitude < -90 || fotoData.fotoLatitude > 90 || fotoData.fotoLongitude < -180 || fotoData.fotoLongitude > 180) {
                     console.warn(`Coordenadas inválidas para a foto ${file.filename}: lat ${fotoData.fotoLatitude}, lon ${fotoData.fotoLongitude}. Usando coordenadas do poste.`);
                     fotoData.fotoLatitude = latitude;
                     fotoData.fotoLongitude = longitude;
@@ -324,7 +341,7 @@ router.post('/postes', handleUpload({ maxFiles: 10 }), async (req, res) => {
                     numero: body.numero,
                     cep: body.cep,
                     usuarioId: body.usuarioId, // Certifique-se que este ID existe na tabela Usuarios
-                    
+
                     // Campos opcionais (com tratamento para null/undefined/empty string)
                     localizacao: body.localizacao || null,
                     emFrente: body.emFrente || null,
@@ -403,7 +420,7 @@ router.post('/postes', handleUpload({ maxFiles: 10 }), async (req, res) => {
             if (target && typeof target === 'string' && target.includes('numeroIdentificacao')) {
                 userMessage = 'Este número de identificação do poste já existe no sistema.';
             } else if (target && Array.isArray(target) && target.includes('numeroIdentificacao')) {
-                 userMessage = 'Este número de identificação do poste já existe no sistema.';
+                userMessage = 'Este número de identificação do poste já existe no sistema.';
             }
             // Adicione outras verificações de target se necessário (ex: idUnicoArvore se implementado)
             return res.status(400).json({
@@ -412,10 +429,10 @@ router.post('/postes', handleUpload({ maxFiles: 10 }), async (req, res) => {
                 code: 'DUPLICATE_ENTRY'
             });
         }
-        
+
         // Erro genérico do S3 (se uploadToS3 lançar erro)
         if (error.message.includes('Falha no upload para S3')) {
-             return res.status(502).json({
+            return res.status(502).json({
                 success: false,
                 message: 'Erro ao armazenar uma ou mais imagens. Verifique as configurações do S3.',
                 code: 'S3_UPLOAD_ERROR'
