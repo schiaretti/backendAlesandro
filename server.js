@@ -18,86 +18,130 @@ const __dirname = path.dirname(__filename);
 const prisma = new PrismaClient();
 const app = express();
 const PORT = process.env.PORT || 3000;
-const uploadDir = process.env.UPLOAD_DIR || '/data/uploads';
-app.use('/uploads', express.static(uploadDir));
 
-// Garante que o diretório existe
-if (!fs.existsSync(uploadDir)) {
-  fs.mkdirSync(uploadDir, { recursive: true });
-  console.log(`📁 Diretório de uploads criado em: ${uploadDir}`);
-}
+// 1. Configuração avançada do diretório de uploads
+const uploadDir = path.resolve(process.env.UPLOAD_DIR || './data/uploads');
+const MAX_FILE_SIZE = process.env.MAX_FILE_SIZE || '10mb';
+const CORS_ORIGIN = process.env.CORS_ORIGIN || '*';
 
-// 1. Configuração do diretório de uploads
+// 2. Garantia de criação do diretório com tratamento robusto
 const ensureUploadsDir = () => {
-  if (!fs.existsSync(uploadDir)) {
-    fs.mkdirSync(uploadDir, { recursive: true });
-    console.log(`📁 Diretório de uploads criado em: ${uploadDir}`);
+  try {
+    if (!fs.existsSync(uploadDir)) {
+      fs.mkdirSync(uploadDir, { 
+        recursive: true,
+        mode: 0o755 // rwxr-xr-x
+      });
+      console.log(`📁 Diretório de uploads criado em: ${uploadDir}`);
+      
+      // Cria um arquivo README para documentação interna
+      const readmePath = path.join(uploadDir, 'README.md');
+      if (!fs.existsSync(readmePath)) {
+        fs.writeFileSync(readmePath, `# Diretório de Uploads\n\nArquivos enviados pelos usuários são armazenados aqui.\n\n**Não remova manualmente os arquivos!**`);
+      }
+    }
+  } catch (err) {
+    console.error('❌ Falha crítica ao configurar diretório de uploads:', err);
+    process.exit(1); // Encerra o processo se não conseguir criar a pasta
   }
 };
 
-// 2. Middlewares essenciais
+// 3. Middlewares essenciais com configurações aprimoradas
 app.use((req, res, next) => {
-  console.log(`[${new Date().toISOString()}] ${req.method} ${req.originalUrl}`);
+  console.log(`[${new Date().toISOString()}] ${req.method} ${req.originalUrl} ${req.ip}`);
   next();
 });
 
-fs.mkdirSync(uploadDir, { recursive: true, mode: 0o755 });
-
 app.use(cors({
-  origin: process.env.CORS_ORIGIN || '*',
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'x-auth-token'],
-  exposedHeaders: ['Authorization'],
-  credentials: true
+  origin: CORS_ORIGIN,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'x-auth-token', 'x-requested-with'],
+  exposedHeaders: ['Authorization', 'x-file-id'],
+  credentials: true,
+  maxAge: 86400
 }));
 
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true }));
-
-// 3. Servir arquivos estáticos com configurações otimizadas
-app.use('/uploads', express.static(uploadDir, {
-  setHeaders: (res) => {
-    res.set('Cache-Control', 'public, max-age=31536000');
-  },
-  fallthrough: false // Retorna 404 se o arquivo não existir
+app.use(express.json({ 
+  limit: MAX_FILE_SIZE,
+  verify: (req, res, buf) => {
+    req.rawBody = buf.toString(); // Para validações adicionais
+  }
 }));
 
-// 4. Rotas
+app.use(express.urlencoded({ 
+  extended: true, 
+  limit: MAX_FILE_SIZE 
+}));
+
+// 4. Configuração de arquivos estáticos com segurança
+app.use('/uploads', (req, res, next) => {
+  // Proteção básica contra directory traversal
+  if (req.path.includes('../')) {
+    return res.status(403).json({ 
+      success: false,
+      message: 'Acesso proibido ao recurso'
+    });
+  }
+  next();
+}, express.static(uploadDir, {
+  dotfiles: 'ignore', // Ignora arquivos ocultos
+  etag: true,
+  fallthrough: false,
+  index: false,
+  lastModified: true,
+  maxAge: '1d'
+}));
+
+// 5. Rotas principais
 app.use('/api', publicRoutes);
-app.use('/api', auth, privateRoutes); // Adicionei o middleware auth aqui
+app.use('/api', auth, privateRoutes);
 
-// 5. Endpoints de sistema
+// 6. Endpoints de sistema melhorados
 app.get('/health', async (req, res) => {
   try {
+    // Teste de conexão com o banco
     await prisma.$queryRaw`SELECT 1`;
+    
+    // Teste de escrita no diretório
+    const testFile = path.join(uploadDir, `.healthcheck_${Date.now()}`);
+    fs.writeFileSync(testFile, 'OK');
+    fs.unlinkSync(testFile);
+    
     res.status(200).json({
       status: 'OK',
-      database: 'conectado',
-      uploadDir: uploadDir,
-      files: fs.readdirSync(uploadDir).length
+      services: {
+        database: true,
+        filesystem: true
+      },
+      system: {
+        uploadDir: uploadDir,
+        freeSpace: fs.statSync(uploadDir).size,
+        nodeVersion: process.version,
+        environment: process.env.NODE_ENV || 'development'
+      }
     });
   } catch (error) {
-    res.status(500).json({
-      status: 'ERROR',
-      database: 'desconectado',
-      error: error.message
+    res.status(503).json({
+      status: 'SERVICE_UNAVAILABLE',
+      error: error.message,
+      failedService: error.code === 'P1001' ? 'database' : 'filesystem',
+      timestamp: new Date().toISOString()
     });
   }
 });
 
-app.get('/test-upload/:filename', (req, res) => {
-  const filePath = path.join(uploadDir, req.params.filename);
-  if (fs.existsSync(filePath)) {
-    res.sendFile(filePath);
-  } else {
-    res.status(404).json({ error: 'Arquivo não encontrado', path: filePath });
-  }
-});
-
-app.get('/', (req, res) => {
+app.get('/system/info', (req, res) => {
   res.status(200).json({
     status: 'online',
+    uptime: process.uptime(),
     environment: process.env.NODE_ENV || 'development',
+    resources: {
+      uploadDir: {
+        path: uploadDir,
+        totalFiles: fs.readdirSync(uploadDir).length,
+        totalSize: calculateFolderSize(uploadDir)
+      }
+    },
     endpoints: {
       public: {
         login: 'POST /api/login',
@@ -111,33 +155,108 @@ app.get('/', (req, res) => {
   });
 });
 
-// 6. Tratamento de erros global
+// 7. Tratamento de erros global aprimorado
 app.use((err, req, res, next) => {
-  console.error('❌ Erro:', err.stack);
+  console.error('❌ Erro:', {
+    message: err.message,
+    stack: err.stack,
+    timestamp: new Date().toISOString(),
+    path: req.path,
+    method: req.method
+  });
+
+  // Erros específicos do Prisma
+  if (err.code?.startsWith('P')) {
+    return res.status(400).json({
+      success: false,
+      message: 'Erro de banco de dados',
+      code: err.code,
+      meta: err.meta
+    });
+  }
+
+  // Erros de upload
+  if (err.code === 'LIMIT_FILE_SIZE') {
+    return res.status(413).json({
+      success: false,
+      message: `Arquivo muito grande. Limite: ${MAX_FILE_SIZE}`,
+      code: 'FILE_SIZE_LIMIT_EXCEEDED'
+    });
+  }
+
+  // Erro genérico
   res.status(500).json({
     success: false,
     message: 'Erro interno do servidor',
-    ...(process.env.NODE_ENV === 'development' && { stack: err.stack })
+    reference: `ERR-${Date.now()}`,
+    ...(process.env.NODE_ENV === 'development' && { 
+      stack: err.stack,
+      details: err.message 
+    })
   });
 });
 
-// 7. Inicialização do servidor
+// 8. Inicialização robusta do servidor
 const startServer = async () => {
-  ensureUploadsDir();
-  
-  app.listen(PORT, () => {
-    console.log(`🚀 Servidor rodando em http://localhost:${PORT}`);
-    console.log(`📁 Diretório de uploads: ${uploadDir}`);
-  });
+  try {
+    // Pré-inicialização
+    ensureUploadsDir();
+    await prisma.$connect();
+    
+    // Verificação de dependências
+    verifyDependencies();
 
-  process.on('SIGTERM', async () => {
-    console.log('🛑 Encerrando servidor...');
-    await prisma.$disconnect();
-    process.exit(0);
-  });
+    const server = app.listen(PORT, () => {
+      console.log(`
+      🚀 Servidor rodando em http://localhost:${PORT}
+      📁 Diretório de uploads: ${uploadDir}
+      ⏱  ${new Date().toLocaleString()}
+      `);
+    });
+
+    // Gerenciamento de shutdown
+    const shutdown = async (signal) => {
+      console.log(`\n🛑 Recebido ${signal}, encerrando graciosamente...`);
+      server.close(async () => {
+        await prisma.$disconnect();
+        console.log('✅ Servidor encerrado com sucesso');
+        process.exit(0);
+      });
+    };
+
+    process.on('SIGTERM', () => shutdown('SIGTERM'));
+    process.on('SIGINT', () => shutdown('SIGINT'));
+    process.on('unhandledRejection', (err) => {
+      console.error('⚠️ Unhandled Rejection:', err);
+      shutdown('UNHANDLED_REJECTION');
+    });
+
+  } catch (error) {
+    console.error('🔥 Falha catastrófica na inicialização:', error);
+    process.exit(1);
+  }
 };
 
-startServer().catch(err => {
-  console.error('Falha ao iniciar servidor:', err);
-  process.exit(1);
-});
+// Funções auxiliares
+function calculateFolderSize(dir) {
+  const files = fs.readdirSync(dir);
+  return files.reduce((acc, file) => {
+    const filePath = path.join(dir, file);
+    const stats = fs.statSync(filePath);
+    return acc + stats.size;
+  }, 0);
+}
+
+function verifyDependencies() {
+  try {
+    require.resolve('@prisma/client');
+    require.resolve('express');
+    // Adicione outras verificações conforme necessário
+  } catch (err) {
+    console.error('❌ Dependência não encontrada:', err.message);
+    process.exit(1);
+  }
+}
+
+// Inicia o servidor
+startServer();
