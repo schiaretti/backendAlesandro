@@ -304,11 +304,7 @@ router.post('/postes', handleUpload({ maxFiles: 10 }), async (req, res) => {
                     tipo: file.tipo,
                     fotoLatitude: latitude,
                     fotoLongitude: longitude,
-                    metadata: {
-                        originalName: file.originalname,
-                        size: file.size,
-                        mimetype: file.mimetype
-                    }
+                  
                 }))
             }
         };
