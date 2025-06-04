@@ -354,7 +354,7 @@ router.post('/postes', handleUpload({ maxFiles: 10 }), async (req, res) => {
 });
 
 // --- Rota para Atualizar Localização do Poste --- 
-router.patch('/postes/:id/location', async (req, res) => {
+router.patch('/api/postes/:id/location', async (req, res) => {
     const { id } = req.params;
     const { latitude, longitude } = req.body;
     console.log(`Recebida requisição PATCH /api/postes/${id}/location`);
