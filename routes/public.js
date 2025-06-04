@@ -647,7 +647,7 @@ router.get('/relatorios/postes', async (req, res) => {
 
         const contarComponentes = async (componente) => {
             const count = await prisma.postes.count({ 
-                where: { ...where, [componente]: true } 
+                where: { ...where, [componente]: 'true' } 
             });
             return count;
         };
