@@ -20,7 +20,10 @@ const firebaseApp = initializeApp({
 
 const bucket = getStorage(firebaseApp).bucket();
 
-// --- Configurações ---
+// --- Configurações ---   
+
+
+
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 const ALLOWED_MIME_TYPES = ['image/jpeg', 'image/png', 'image/jpg'];
 
