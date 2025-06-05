@@ -6,6 +6,7 @@ import jwt from 'jsonwebtoken';
 // Importa as funções necessárias do middleware de upload
 // Certifique-se que o caminho para fileUpload.js está correto
 import { handleUpload, cleanUploads } from '../middlewares/fileUpload.js';
+import { Upload } from '@aws-sdk/lib-storage';
 
 const prisma = new PrismaClient();
 const router = express.Router();
@@ -186,13 +187,18 @@ router.get('/count-postes', async (req, res) => {
 });
 
 // --- Rota para Criar Poste (com Upload Local) --- 
+
 router.post('/postes', handleUpload({ maxFiles: 10 }), async (req, res) => {
     console.log('Recebida requisição POST /api/postes');
     console.log('Body:', req.body);
     console.log('Files:', req.files ? `${req.files.length} arquivos recebidos` : 'Nenhum arquivo recebido');
 
+    // Garantir que files seja um array vazio se não houver arquivos, para evitar erros no map
+    const files = req.files || [];
+    const fileUrls = files.map(f => f.url).filter(url => !!url); // Pega apenas URLs válidas
+
     try {
-        const { body, files } = req;
+        const { body } = req;
 
         // 1. Validação de campos obrigatórios
         const requiredFields = ['cidade', 'endereco', 'numero', 'usuarioId', 'numeroIdentificacao', 'coords'];
@@ -200,7 +206,7 @@ router.post('/postes', handleUpload({ maxFiles: 10 }), async (req, res) => {
         
         if (missingFields.length > 0) {
             console.warn('Campos obrigatórios faltando:', missingFields);
-            if (files) await cleanUploads(files);
+            if (fileUrls.length > 0) await cleanUploads(fileUrls);
             return res.status(400).json({
                 success: false,
                 message: `Campos obrigatórios faltando: ${missingFields.join(', ')}`,
@@ -211,7 +217,7 @@ router.post('/postes', handleUpload({ maxFiles: 10 }), async (req, res) => {
         // 2. Validação do formato do número de identificação
         if (!/^\d{5}-\d{1}$/.test(body.numeroIdentificacao)) {
             console.warn('Formato inválido para numeroIdentificacao:', body.numeroIdentificacao);
-            if (files) await cleanUploads(files);
+            if (fileUrls.length > 0) await cleanUploads(fileUrls);
             return res.status(400).json({
                 success: false,
                 message: 'Formato do número do poste inválido. Use: XXXXX-X (5 dígitos, traço, 1 dígito)',
@@ -235,7 +241,7 @@ router.post('/postes', handleUpload({ maxFiles: 10 }), async (req, res) => {
             console.log('Coordenadas validadas:', { latitude, longitude });
         } catch (error) {
             console.warn('Erro ao validar coordenadas:', error.message);
-            if (files) await cleanUploads(files);
+            if (fileUrls.length > 0) await cleanUploads(fileUrls);
             return res.status(400).json({
                 success: false,
                 message: `Coordenadas inválidas: ${error.message}`,
@@ -246,12 +252,13 @@ router.post('/postes', handleUpload({ maxFiles: 10 }), async (req, res) => {
         // 4. Validação das fotos obrigatórias
         const TIPOS_FOTO = { PANORAMICA: 'PANORAMICA', LUMINARIA: 'LUMINARIA', ARVORE: 'ARVORE' };
         const requiredPhotos = [TIPOS_FOTO.PANORAMICA, TIPOS_FOTO.LUMINARIA];
-        const uploadedPhotoTypes = files?.map(f => f.tipo) || [];
+        const uploadedPhotoTypes = files.map(f => f.tipo) || [];
         const missingRequiredPhotos = requiredPhotos.filter(type => !uploadedPhotoTypes.includes(type));
 
         if (missingRequiredPhotos.length > 0) {
             console.warn('Fotos obrigatórias faltando:', missingRequiredPhotos);
-            if (files) await cleanUploads(files);
+            // A limpeza já estava correta aqui na versão anterior, mas garantimos consistência
+            if (fileUrls.length > 0) await cleanUploads(fileUrls);
             return res.status(400).json({
                 success: false,
                 message: `Fotos obrigatórias faltando: ${missingRequiredPhotos.join(', ')}`,
@@ -299,12 +306,12 @@ router.post('/postes', handleUpload({ maxFiles: 10 }), async (req, res) => {
             isLastPost: body.isLastPost === 'true',
             distanciaEntrePostes: body.distanciaEntrePostes ? parseInt(body.distanciaEntrePostes) : null,
             fotos: {
+                // CORREÇÃO APLICADA AQUI: Usar file.url (a variável) em vez da string 'file.url'
                 create: files.map(file => ({
-                    url: `/uploads/${file.filename}`,
+                    url: file.url, // <-- CORRIGIDO
                     tipo: file.tipo,
-                    fotoLatitude: latitude,
-                    fotoLongitude: longitude,
-                  
+                    fotoLatitude: latitude, // Considerar usar lat/lon da foto se disponível
+                    fotoLongitude: longitude, // Considerar usar lat/lon da foto se disponível
                 }))
             }
         };
@@ -331,9 +338,10 @@ router.post('/postes', handleUpload({ maxFiles: 10 }), async (req, res) => {
             stack: error.stack
         });
 
-        if (req.files) {
-            console.log('Limpando arquivos temporários...');
-            await cleanUploads(req.files);
+        // CORREÇÃO APLICADA AQUI: Usar fileUrls (lista de URLs válidas)
+        if (fileUrls.length > 0) {
+            console.log('Limpando arquivos enviados ao Firebase devido a erro...');
+            await cleanUploads(fileUrls);
         }
 
         if (error.code === 'P2002') {
@@ -352,6 +360,8 @@ router.post('/postes', handleUpload({ maxFiles: 10 }), async (req, res) => {
         });
     }
 });
+
+
 
 // --- Rota para Atualizar Localização do Poste --- 
 router.patch('/api/postes/:id/location', async (req, res) => {
