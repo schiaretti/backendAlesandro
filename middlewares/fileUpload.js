@@ -4,6 +4,7 @@ import path from 'path';
 import { initializeApp, cert } from 'firebase-admin/app';
 import { getStorage } from 'firebase-admin/storage';
 import dotenv from 'dotenv';
+import { Buffer } from 'buffer';
 
 dotenv.config();
 
