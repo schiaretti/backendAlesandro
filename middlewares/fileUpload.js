@@ -8,11 +8,11 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 // --- Configuração do Firebase ---
-const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_BASE64);
 
 const firebaseApp = initializeApp({
   credential: cert(serviceAccount),
-  storageBucket: `alliluminacaopublica.firebasestorage.app` // Usa o project_id do service account
+  storageBucket: `alliluminacaopublica.firebasestorage.app` 
 });
 
 const bucket = getStorage(firebaseApp).bucket();
