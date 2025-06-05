@@ -203,7 +203,7 @@ router.post('/postes', handleUpload({ maxFiles: 10 }), async (req, res) => {
         // 1. Validação de campos obrigatórios
         const requiredFields = ['cidade', 'endereco', 'numero', 'usuarioId', 'numeroIdentificacao', 'coords'];
         const missingFields = requiredFields.filter(field => !body[field]);
-        
+
         if (missingFields.length > 0) {
             console.warn('Campos obrigatórios faltando:', missingFields);
             if (fileUrls.length > 0) await cleanUploads(fileUrls);
@@ -423,30 +423,30 @@ router.get('/relatorios/postes', async (req, res) => {
             tipoRelatorio = 'estatisticas',
             incluirFotos = 'false',
             tipoFoto,
-            
+
             // Filtros básicos
             endereco, cidade, numero, cep, localizacao,
-            
+
             // Componentes elétricos
             transformador, concentrador, telecom, medicao,
-            
+
             // Iluminação
             tipoLampada, potenciaMin, potenciaMax, tipoReator, tipoComando,
-            
+
             // Características físicas
             alturaposteMin, alturaposteMax, estruturaposte, tipoBraco,
             tamanhoBracoMin, tamanhoBracoMax, quantidadePontosMin, quantidadePontosMax,
-            
+
             // Rede elétrica
             tipoRede, tipoCabo, numeroFases,
-            
+
             // Infraestrutura
             tipoVia, hierarquiaVia, tipoPavimento, quantidadeFaixasMin, quantidadeFaixasMax,
             tipoPasseio, canteiroCentral, larguraCanteiroMin, larguraCanteiroMax,
-            
+
             // Outros
             finalidadeInstalacao, especieArvore, distanciaEntrePostesMin, distanciaEntrePostesMax,
-            
+
             // Paginação
             page = 1,
             per_page = 20
@@ -629,8 +629,8 @@ router.get('/relatorios/postes', async (req, res) => {
             postesProcessados = postes.map(poste => ({
                 ...poste,
                 fotos: poste.fotos?.map(foto => ({
-                    ...foto,
-                    url: `${process.env.APP_URL || 'https://backendalesandro-production.up.railway.app'}${foto.url}`
+                    ...foto
+                    // Mantém a URL original do Firebase sem modificações
                 })) || []
             }));
         }
@@ -648,7 +648,7 @@ router.get('/relatorios/postes', async (req, res) => {
         const contarPorFaixa = (campo, faixas) => {
             const contagem = {};
             faixas.forEach(faixa => {
-                contagem[`${faixa.min}-${faixa.max}`] = postes.filter(p => 
+                contagem[`${faixa.min}-${faixa.max}`] = postes.filter(p =>
                     p[campo] >= faixa.min && p[campo] <= faixa.max
                 ).length;
             });
@@ -656,8 +656,8 @@ router.get('/relatorios/postes', async (req, res) => {
         };
 
         const contarComponentes = async (componente) => {
-            const count = await prisma.postes.count({ 
-                where: { ...where, [componente]: 'true' } 
+            const count = await prisma.postes.count({
+                where: { ...where, [componente]: 'true' }
             });
             return count;
         };
