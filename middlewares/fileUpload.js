@@ -8,7 +8,9 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 // --- Configuração do Firebase ---
-const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_BASE64);
+const serviceAccount = JSON.parse(
+  Buffer.from(process.env.FIREBASE_SERVICE_ACCOUNT_BASE64, 'base64').toString('utf-8')
+); 
 
 const firebaseApp = initializeApp({
   credential: cert(serviceAccount),
