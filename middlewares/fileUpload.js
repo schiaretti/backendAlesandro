@@ -12,7 +12,7 @@ const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
 
 const firebaseApp = initializeApp({
   credential: cert(serviceAccount),
-  storageBucket: `${serviceAccount.project_id}.appspot.com` // Usa o project_id do service account
+  storageBucket: `alliluminacaopublica.firebasestorage.app` // Usa o project_id do service account
 });
 
 const bucket = getStorage(firebaseApp).bucket();
