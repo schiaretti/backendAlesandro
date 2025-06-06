@@ -637,13 +637,14 @@ router.get('/relatorios/postes', async (req, res) => {
 
         // 8. GERAR ESTATÍSTICAS (APENAS NÚMEROS ABSOLUTOS)
         const contarPorValor = (campo) => {
-            const contagem = {};
+            const contagem = {};            
             postes.forEach(p => {
                 const valor = p[campo] || 'Não informado';
                 contagem[valor] = (contagem[valor] || 0) + 1;
             });
             return contagem;
         };
+        
 
         const contarPorFaixa = (campo, faixas) => {
             const contagem = {};
