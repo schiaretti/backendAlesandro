@@ -11,11 +11,11 @@ dotenv.config();
 // --- Configuração do Firebase ---
 const serviceAccount = JSON.parse(
   Buffer.from(process.env.FIREBASE_SERVICE_ACCOUNT_BASE64, 'base64').toString('utf-8')
-); 
+);
 
 const firebaseApp = initializeApp({
   credential: cert(serviceAccount),
-  storageBucket: `alliluminacaopublica.firebasestorage.app` 
+  storageBucket: `alliluminacaopublica.firebasestorage.app`
 });
 
 const bucket = getStorage(firebaseApp).bucket();
@@ -60,7 +60,7 @@ const handleUpload = (options = {}) => {
   const uploader = multer({
     storage: storage,
     fileFilter: fileFilter,
-    limits: { 
+    limits: {
       fileSize: options.maxFileSize || MAX_FILE_SIZE,
       files: options.maxFiles || 10
     }
@@ -118,9 +118,13 @@ const handleUpload = (options = {}) => {
 
           // Torna o arquivo público
           await fileRef.makePublic();
-          
+
           // Obtém URL pública
-          const publicUrl = `https://storage.googleapis.com/${bucket.name}/${fileRef.name}`;
+          //const publicUrl = `https://storage.googleapis.com/${bucket.name}/${fileRef.name}`;
+
+          // --- GERANDO O LINK CORRETO DO FIREBASE ---
+          const encodedFileName = encodeURIComponent(fileRef.name).replace(/\//g, '%2F');
+          const publicUrl = `https://firebasestorage.googleapis.com/v0/b/${bucket.name}/o/${encodedFileName}?alt=media`;
 
           // Adiciona metadados ao objeto file
           file.tipo = tiposArray[index] || 'OUTRO';
