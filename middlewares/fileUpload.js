@@ -124,7 +124,9 @@ const handleUpload = (options = {}) => {
 
           // --- GERANDO O LINK CORRETO DO FIREBASE ---
           const encodedFileName = encodeURIComponent(fileRef.name).replace(/\//g, '%2F');
-          const publicUrl = `https://firebasestorage.googleapis.com/v0/b/${bucket.name}/o/${encodedFileName}?alt=media`;
+          const [metadata] = await fileRef.getMetadata();
+          const token = metadata.metadata?.firebaseStorageDownloadTokens || metadata.downloadTokens;
+          const publicUrl = `https://firebasestorage.googleapis.com/v0/b/${bucket.name}/o/${encodedFileName}?alt=media&token=${token}`;
 
           // Adiciona metadados ao objeto file
           file.tipo = tiposArray[index] || 'OUTRO';
