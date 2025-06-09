@@ -476,47 +476,22 @@ router.get('/relatorios/postes', async (req, res) => {
         //if (telecom) where.telecom = telecom === "true";
         //if (concentrador) where.concentrador = concentrador === "true";
 
-        // Componentes elétricos
 
-        // Para transformador
+        // Componentes elétricos - Filtro corrigido
         if (transformador) {
-            if (transformador === "true") {
-                // Se o frontend enviou 'true', significa que o campo deve ter algum valor (não nulo/vazio)
-                where.transformador = { not: null }; // Ou { not: "" } se você armazena como string vazia
-            } else if (transformador === "false") {
-                // Se o frontend enviou 'false', significa que o campo deve ser nulo ou vazio
-                where.transformador = null; // Ou "" se você armazena como string vazia
-            }
-            // Se transformador for "" (Todos), o filtro não é aplicado (já tratado pelo if inicial)
+            where.transformador = transformador === "true" ? "true" : transformador === "false" ? "false" : null;
         }
 
-        // Para medicao
-        if (medicao) {
-            // Para campos de texto como medicao e telecom, você pode querer buscar por um valor específico
-            // ou por campos vazios (se o frontend enviar 'vazio' ou 'não informado')
-            if (medicao.toLowerCase() === "vazio" || medicao.toLowerCase() === "não informado") {
-                where.medicao = null; // Ou "" se você armazena como string vazia
-            } else {
-                where.medicao = medicao; // Busca pelo valor exato da string
-            }
-        }
-
-        // Para telecom (mesma lógica de medicao)
-        if (telecom) {
-            if (telecom.toLowerCase() === "vazio" || telecom.toLowerCase() === "não informado") {
-                where.telecom = null; // Ou ""
-            } else {
-                where.telecom = telecom;
-            }
-        }
-
-        // Para concentrador (mesma lógica de transformador)
         if (concentrador) {
-            if (concentrador === "true") {
-                where.concentrador = { not: null }; // Ou { not: "" }
-            } else if (concentrador === "false") {
-                where.concentrador = null; // Ou ""
-            }
+            where.concentrador = concentrador === "true" ? "true" : concentrador === "false" ? "false" : null;
+        }
+
+        if (telecom) {
+            where.telecom = telecom === "true" ? "true" : telecom === "false" ? "false" : null;
+        }
+
+        if (medicao) {
+            where.medicao = medicao === "true" ? "true" : medicao === "false" ? "false" : null;
         }
 
 
@@ -700,9 +675,13 @@ router.get('/relatorios/postes', async (req, res) => {
             return contagem;
         };
 
+        // Substitua a função contarComponentes por:
         const contarComponentes = async (componente) => {
             const count = await prisma.postes.count({
-                where: { ...where, [componente]: 'true' }
+                where: {
+                    ...where,
+                    [componente]: "true" // Filtra por string "true" explicitamente
+                }
             });
             return count;
         };
