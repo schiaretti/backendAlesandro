@@ -477,23 +477,38 @@ router.get('/relatorios/postes', async (req, res) => {
         //if (concentrador) where.concentrador = concentrador === "true";
 
 
-        // Componentes elétricos - Filtro corrigido
+
+        // Componentes elétricos - Filtro universal
         if (transformador) {
-            where.transformador = transformador === "true" ? "true" : transformador === "false" ? "false" : null;
+            where.OR = [
+                { transformador: transformador === "true" ? "true" : "false" },
+                { transformador: transformador === "true" ? true : false }
+            ];
         }
 
+        // Componentes elétricos - Filtro universal
         if (concentrador) {
-            where.concentrador = concentrador === "true" ? "true" : concentrador === "false" ? "false" : null;
+            where.OR = [
+                { concentrador: concentrador === "true" ? "true" : "false" },
+                { concentrador: concentrador === "true" ? true : false }
+            ];
         }
 
+         // Componentes elétricos - Filtro universal
         if (telecom) {
-            where.telecom = telecom === "true" ? "true" : telecom === "false" ? "false" : null;
+            where.OR = [
+                { telecom: telecom === "true" ? "true" : "false" },
+                { telecom: telecom === "true" ? true : false }
+            ];
         }
 
+           // Componentes elétricos - Filtro universal
         if (medicao) {
-            where.medicao = medicao === "true" ? "true" : medicao === "false" ? "false" : null;
+            where.OR = [
+                { medicao: medicao === "true" ? "true" : "false" },
+                { medicao: medicao === "true" ? true : false }
+            ];
         }
-
 
         // Iluminação
         if (tipoLampada) where.tipoLampada = tipoLampada;
@@ -675,12 +690,15 @@ router.get('/relatorios/postes', async (req, res) => {
             return contagem;
         };
 
-        // Substitua a função contarComponentes por:
         const contarComponentes = async (componente) => {
             const count = await prisma.postes.count({
                 where: {
                     ...where,
-                    [componente]: "true" // Filtra por string "true" explicitamente
+                    OR: [
+                        { [componente]: "true" },    // Para valores salvos como string
+                        { [componente]: true },      // Para valores salvos como boolean (se existirem)
+                        { [componente]: { contains: "sim", mode: 'insensitive' } } // Se usar "sim"/"não"
+                    ]
                 }
             });
             return count;
