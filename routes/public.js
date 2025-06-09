@@ -425,7 +425,7 @@ router.get('/relatorios/postes', async (req, res) => {
             tipoFoto,
 
             // Filtros básicos
-            endereco, cidade, numero, cep, localizacao,
+            endereco, cidade, numero, cep, localizacao, numeroIdentificacao,
 
             // Componentes elétricos
             transformador, concentrador, telecom, medicao,
@@ -463,6 +463,13 @@ router.get('/relatorios/postes', async (req, res) => {
         // 3. CONSTRUÇÃO DOS FILTROS (where)
         const where = {};
 
+         if (numeroIdentificacao) {
+            where.numeroIdentificacao = {
+                equals: numeroIdentificacao,
+                mode: 'insensitive' // Para ignorar maiúsculas/minúsculas
+            };
+        }
+
         // Filtros básicos
         if (cidade) where.cidade = cidade;
         if (endereco) where.endereco = { contains: endereco, mode: 'insensitive' };
@@ -475,7 +482,7 @@ router.get('/relatorios/postes', async (req, res) => {
         if (medicao) where.medicao = medicao === "true";
         if (telecom) where.telecom = telecom === "true";
         if (concentrador) where.concentrador = concentrador === "true";
-
+       
 
 
 
