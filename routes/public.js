@@ -278,10 +278,10 @@ router.post('/postes', handleUpload({ maxFiles: 10 }), async (req, res) => {
             usuarioId: body.usuarioId,
             localizacao: body.localizacao || null,
             emFrente: body.emFrente || null,
-            transformador: body.transformador || null,
-            medicao: body.medicao || null,
-            telecom: body.telecom || null,
-            concentrador: body.concentrador || null,
+            transformador: body.transformador === 'true' ? true : (body.transformador === 'false' ? false : null),
+            medicao: body.medicao === 'true' ? true : (body.medicao === 'false' ? false : null),
+            telecom: body.telecom === 'true' ? true : (body.telecom === 'false' ? false : null),
+            concentrador: body.concentrador === 'true' ? true : (body.concentrador === 'false' ? false : null),
             poste: body.poste || null,
             alturaposte: body.alturaposte ? parseFloat(body.alturaposte) : null,
             estruturaposte: body.estruturaposte || null,
@@ -471,44 +471,13 @@ router.get('/relatorios/postes', async (req, res) => {
         if (localizacao) where.localizacao = localizacao;
 
         // Componentes elétricos
-        //if (transformador) where.transformador = transformador === "true";
-        //if (medicao) where.medicao = medicao === "true";
-        //if (telecom) where.telecom = telecom === "true";
-        //if (concentrador) where.concentrador = concentrador === "true";
+        if (transformador) where.transformador = transformador === "true";
+        if (medicao) where.medicao = medicao === "true";
+        if (telecom) where.telecom = telecom === "true";
+        if (concentrador) where.concentrador = concentrador === "true";
 
 
 
-        // Componentes elétricos - Filtro universal
-        if (transformador) {
-            where.OR = [
-                { transformador: transformador === "true" ? "true" : "false" },
-                { transformador: transformador === "true" ? true : false }
-            ];
-        }
-
-        // Componentes elétricos - Filtro universal
-        if (concentrador) {
-            where.OR = [
-                { concentrador: concentrador === "true" ? "true" : "false" },
-                { concentrador: concentrador === "true" ? true : false }
-            ];
-        }
-
-         // Componentes elétricos - Filtro universal
-        if (telecom) {
-            where.OR = [
-                { telecom: telecom === "true" ? "true" : "false" },
-                { telecom: telecom === "true" ? true : false }
-            ];
-        }
-
-           // Componentes elétricos - Filtro universal
-        if (medicao) {
-            where.OR = [
-                { medicao: medicao === "true" ? "true" : "false" },
-                { medicao: medicao === "true" ? true : false }
-            ];
-        }
 
         // Iluminação
         if (tipoLampada) where.tipoLampada = tipoLampada;
@@ -669,11 +638,11 @@ router.get('/relatorios/postes', async (req, res) => {
             }));
         }
 
-        // 8. GERAR ESTATÍSTICAS (APENAS NÚMEROS ABSOLUTOS)
+        // Função contarPorValor (depois):
         const contarPorValor = (campo) => {
             const contagem = {};
             postes.forEach(p => {
-                const valor = p[campo] || 'Não informado';
+                const valor = p[campo] !== null && p[campo] !== undefined ? p[campo] : "Não informado";
                 contagem[valor] = (contagem[valor] || 0) + 1;
             });
             return contagem;
@@ -690,15 +659,12 @@ router.get('/relatorios/postes', async (req, res) => {
             return contagem;
         };
 
+        // Função contarComponentes (depois):
         const contarComponentes = async (componente) => {
             const count = await prisma.postes.count({
                 where: {
                     ...where,
-                    OR: [
-                        { [componente]: "true" },    // Para valores salvos como string
-                        { [componente]: true },      // Para valores salvos como boolean (se existirem)
-                        { [componente]: { contains: "sim", mode: 'insensitive' } } // Se usar "sim"/"não"
-                    ]
+                    [componente]: true // Conta apenas onde o booleano é true
                 }
             });
             return count;

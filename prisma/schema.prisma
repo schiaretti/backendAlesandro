@@ -42,10 +42,10 @@ model Postes {
   
   // Dados técnicos (converti para tipos mais apropriados)
   emFrente           String?
-  transformador      String?
-  medicao            String?
-  telecom            String? 
-  concentrador       String?
+  transformador      Boolean?
+  medicao            Boolean?
+  telecom            Boolean? 
+  concentrador       Boolean?
   poste              String?
   alturaposte        Float?   // Melhor como número
   estruturaposte     String?
