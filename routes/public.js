@@ -471,10 +471,54 @@ router.get('/relatorios/postes', async (req, res) => {
         if (localizacao) where.localizacao = localizacao;
 
         // Componentes elétricos
-        if (transformador) where.transformador = transformador === "true";
-        if (medicao) where.medicao = medicao === "true";
-        if (telecom) where.telecom = telecom === "true";
-        if (concentrador) where.concentrador = concentrador === "true";
+        //if (transformador) where.transformador = transformador === "true";
+        //if (medicao) where.medicao = medicao === "true";
+        //if (telecom) where.telecom = telecom === "true";
+        //if (concentrador) where.concentrador = concentrador === "true";
+
+        // Componentes elétricos
+
+        // Para transformador
+        if (transformador) {
+            if (transformador === "true") {
+                // Se o frontend enviou 'true', significa que o campo deve ter algum valor (não nulo/vazio)
+                where.transformador = { not: null }; // Ou { not: "" } se você armazena como string vazia
+            } else if (transformador === "false") {
+                // Se o frontend enviou 'false', significa que o campo deve ser nulo ou vazio
+                where.transformador = null; // Ou "" se você armazena como string vazia
+            }
+            // Se transformador for "" (Todos), o filtro não é aplicado (já tratado pelo if inicial)
+        }
+
+        // Para medicao
+        if (medicao) {
+            // Para campos de texto como medicao e telecom, você pode querer buscar por um valor específico
+            // ou por campos vazios (se o frontend enviar 'vazio' ou 'não informado')
+            if (medicao.toLowerCase() === "vazio" || medicao.toLowerCase() === "não informado") {
+                where.medicao = null; // Ou "" se você armazena como string vazia
+            } else {
+                where.medicao = medicao; // Busca pelo valor exato da string
+            }
+        }
+
+        // Para telecom (mesma lógica de medicao)
+        if (telecom) {
+            if (telecom.toLowerCase() === "vazio" || telecom.toLowerCase() === "não informado") {
+                where.telecom = null; // Ou ""
+            } else {
+                where.telecom = telecom;
+            }
+        }
+
+        // Para concentrador (mesma lógica de transformador)
+        if (concentrador) {
+            if (concentrador === "true") {
+                where.concentrador = { not: null }; // Ou { not: "" }
+            } else if (concentrador === "false") {
+                where.concentrador = null; // Ou ""
+            }
+        }
+
 
         // Iluminação
         if (tipoLampada) where.tipoLampada = tipoLampada;
@@ -637,14 +681,14 @@ router.get('/relatorios/postes', async (req, res) => {
 
         // 8. GERAR ESTATÍSTICAS (APENAS NÚMEROS ABSOLUTOS)
         const contarPorValor = (campo) => {
-            const contagem = {};            
+            const contagem = {};
             postes.forEach(p => {
                 const valor = p[campo] || 'Não informado';
                 contagem[valor] = (contagem[valor] || 0) + 1;
             });
             return contagem;
         };
-        
+
 
         const contarPorFaixa = (campo, faixas) => {
             const contagem = {};
